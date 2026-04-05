@@ -45,7 +45,7 @@ tidal-titans-2/
 │
 ├── src/
 │   ├── main.js         # Scene, WebGPU renderer, TSL water, post pipeline, boat motion, camera, input
-│   ├── config.js       # config — nested scene tuning (waves, water, depth, fog, camera)
+│   ├── config.js       # config — nested scene tuning (waves, water, sky, depth, fog, camera)
 │   ├── dev-panel.js    # Tweakpane UI — dynamic import in dev only
 │   └── models/
 │       └── pirateShip.js   # createPirateShip() — procedural ship group + sail/flag refs for animation
@@ -75,12 +75,13 @@ Default export: **`config`**. The dev panel edits this object in memory; **Expor
 | Group | Path | Role |
 | ----- | ---- | ---- |
 | Wave layers | `config.waves.wave1`–`wave4` — each `{ freq, speed, amp }` | Used by **CPU** `waveHeight` / `waveNormal` (boat bob/tilt) and mirrored in **TSL** vertex displacement (scaled by `config.water.waveVisualScale` for the mesh). |
-| Water colors | `config.water.colorDeep`, `config.water.colorLight` (hex) | Worley-mixed surface tint in TSL; `colorDeep` also seeds scene fog color at init. |
+| Water colors | `config.water.colorDeep`, `config.water.colorLight` (hex) | Worley-mixed surface tint in TSL; driven by **`uniform` colors** synced each frame from `config` (dev panel live). `colorDeep` is also the scene **fog** tint (synced each frame when fog is enabled). |
+| Sky gradient | `config.sky.horizon`, `config.sky.zenith` (hex) | **`scene.backgroundNode`**: TSL `normalWorld.y` mix between the two; **`uniform` colors** synced each frame — **independent** from water deep/light. |
 | Visual scale | `config.water.waveVisualScale` | Multiplies vertex wave height on the water plane only (0 = flat water, physics unchanged). |
 | Worley motion / scale | `config.water.noiseSpeed`, `config.water.worleyScale0`, `config.water.worleyScale1` | Animated surface variation and refraction mask. |
 | Refraction | `config.water.refractionStrength` | Screen-space UV offset strength. |
 | Depth blend | `config.depth.near`, `config.depth.far` | Remap range for water vs backdrop depth (tuned for linear depth units). |
-| Fog | `config.fog.near`, `config.fog.far` | `THREE.Fog` on the scene (boat, underwater props, sun, etc.). |
+| Fog | `config.fog.enabled`, `config.fog.near`, `config.fog.far` | When enabled, `THREE.Fog` on the scene (boat, underwater props, sun, etc.); near/far/color synced from config each frame. |
 | Orbit zoom | `config.camera` — `distanceInitial`, `distanceMin`, `distanceMax`, `distanceStep` | Scroll-wheel stepped dolly on `camOrbit.distance`; initial value clamped to min/max. |
 
 There is **no** separate GLSL file: water appearance is entirely **TSL node graphs** in `main.js`.
@@ -100,8 +101,8 @@ These read **`config.waves.wave1`–`wave4` only**. They do **not** use `config.
 
 ### 2. Scene & renderer
 
-- **`THREE.Scene`** + **`THREE.Fog`** using `config.water.colorDeep` and `config.fog.near` / `config.fog.far` (sky gradient still uses a separate horizon hex in TSL — align palette when retuning).
-- **`scene.backgroundNode`**: TSL mix on `normalWorld.y` (gradient sky), not a canvas texture.
+- **`THREE.Scene`** + optional **`THREE.Fog`** when `config.fog.enabled`: color from `config.water.colorDeep`, distances from `config.fog.near` / `far` (all synced each frame when on).
+- **`scene.backgroundNode`**: TSL mix on `normalWorld.y` between **`config.sky.horizon`** and **`config.sky.zenith`** (uniform-backed; live with dev panel) — **not** tied to water colors.
 - **`THREE.PerspectiveCamera`** (FOV 55, **near 0.25**, far 500).
 - **`THREE.WebGPURenderer`**: antialias, sRGB output, pixel ratio capped at 2.
 
@@ -115,7 +116,7 @@ These read **`config.waves.wave1`–`wave4` only**. They do **not** use `config.
 
 - **Geometry**: `PlaneGeometry(220, 220, 200, 200)` rotated −90° on X (lies in XZ).
 - **Vertex**: `positionLocal` displaced in Y by a TSL expression that **mirrors** `waveHeight`, times **`uniform(config.water.waveVisualScale)`** (initial uniform value from `config` at material setup).
-- **Uniforms**: `uniform(...)` nodes for each wave component and Worley/refraction parameters; **each frame** the animation loop assigns `.value` from `config.waves` / `config.water` (so Tweakpane and exported config both apply).
+- **Uniforms**: `uniform(...)` nodes for each wave component, Worley/refraction, **water deep/light colors**, and **sky horizon/zenith**; **each frame** the animation loop assigns `.value` / `THREE.Color.set()` from `config` (so Tweakpane and exported config both apply).
 - **Fragment**: Worley-based `waterColor`; **backdrop** samples the scene via `viewportSharedTexture` with refraction UVs and depth tests so geometry above the water is not incorrectly refracted. Transparency enabled for the water mesh.
 
 ### 5. Boat
@@ -153,7 +154,7 @@ Final draw: **`renderPipeline.render()`** (not `renderer.render(scene, camera)` 
 ### 9. Animation loop
 
 1. **`timer.update()`** — `THREE.Timer` for stable `dt` / elapsed `t`.
-2. Sync **all** TSL **`uniform().value`** fields from **`config.waves`** and **`config.water`** (layers, visual scale, Worley, refraction).
+2. Sync **all** TSL **`uniform().value`** / color uniforms from **`config.waves`**, **`config.water`**, and **`config.sky`** (layers, visual scale, Worley, refraction, water/sky colors); sync **`scene.fog`** from **`config.fog`** / **`config.water.colorDeep`** when fog is enabled.
 3. Underwater mesh motion.
 4. Sail / flag flutter using **`boatObj.*`** mesh refs.
 5. Boat speed, turn, **`waveHeight`** for Y, **`waveNormal`** for pitch/roll lerp.
@@ -202,7 +203,7 @@ Skills are mirrored under both `.agents/skills/` and `.claude/skills/`. If you u
 ## Key constraints and gotchas
 
 1. **Wave formula: JS ↔ TSL** — `waveHeight()` in JS and the TSL `vY` expression (same sines, same `config.waves.wave1`–`wave4` inputs) must stay identical or the boat will not sit on the waves you see. **`config.water.waveVisualScale` only scales the GPU displacement**, not physics.
-2. **`config.js` is the source of truth for tuning** — prefer exporting from Tweakpane into `config.js` (default export **`config`**) rather than scattering magic numbers. Scene fog uses **`config.water.colorDeep`** at init; some aesthetic colors still live in `main.js` (sky horizon mix, post tint); if you change the palette, consider updating those too.
+2. **`config.js` is the source of truth for tuning** — prefer exporting from Tweakpane into `config.js` (default export **`config`**) rather than scattering magic numbers. **Sky** is **`config.sky.horizon` / `zenith`** (not water deep/light). Scene fog color tracks **`config.water.colorDeep`**. Some aesthetic colors still live in `main.js` (e.g. post vignette tint `0x74ccf4`, lights); align with palette when retuning.
 3. **No duplicate GLSL ocean shader** — everything water-related is TSL in `main.js`; there is no `syncUniforms()` name or separate vertex/fragment GLSL strings.
 4. **Camera yaw is world-absolute** — do not derive yaw from `boat.rotation.y` or the camera will corkscrew when turning.
 5. **Pitch sign** — keep `camOrbit.pitch += e.movementY * sensitivity` as-is for natural mouse-look.

@@ -53,15 +53,16 @@ async function init() {
     scene.fog = new THREE.Fog(config.water.colorDeep, config.fog.near, config.fog.far);
   }
 
-  // Water tint uniforms — synced each frame so dev-panel colors update TSL water + sky
+  // Water tint uniforms — synced each frame so dev-panel colors update TSL water
   const uWaterColorDeep = uniform(new THREE.Color(config.water.colorDeep));
   const uWaterColorLight = uniform(new THREE.Color(config.water.colorLight));
 
+  // Sky gradient uniforms — separate from water colors
+  const uSkyHorizon = uniform(new THREE.Color(config.sky.horizon));
+  const uSkyZenith = uniform(new THREE.Color(config.sky.zenith));
+
   // TSL gradient sky — replaces the canvas texture sky
-  scene.backgroundNode = normalWorld.y.mix(
-    uWaterColorDeep,
-    color(0x0066ff)
-  );
+  scene.backgroundNode = normalWorld.y.mix(uSkyHorizon, uSkyZenith);
 
   const camera = new THREE.PerspectiveCamera(
     55,
@@ -336,6 +337,9 @@ async function init() {
     uRefractionStrength.value = water.refractionStrength;
     uWaterColorDeep.value.set(water.colorDeep);
     uWaterColorLight.value.set(water.colorLight);
+    const skyCfg = config.sky;
+    uSkyHorizon.value.set(skyCfg.horizon);
+    uSkyZenith.value.set(skyCfg.zenith);
 
     // Scene fog reads from THREE.Fog instance, not config — keep in sync with dev panel
     const fogCfg = config.fog;

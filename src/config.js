@@ -27,6 +27,12 @@ const config = {
     refractionStrength: 0.183,
   },
 
+  // TSL background gradient (normalWorld.y mix) — independent from water colors
+  sky: {
+    horizon: '#0487e2',
+    zenith:  '#0066ff',
+  },
+
   // Depth range for the depth-blend effect (linear depth units)
   depth: {
     near: -0.0088,

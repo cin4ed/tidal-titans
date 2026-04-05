@@ -6,6 +6,7 @@ function serializeConfig(config) {
   const water = config.water;
   const depth = config.depth;
   const fog = config.fog;
+  const sky = config.sky;
   const cam = config.camera;
   return `// Scene / render tuning — single source of truth.
 // Tweak values in the dev panel (npm run dev), then click "Export Config"
@@ -27,6 +28,11 @@ const config = {
     worleyScale0: ${n(water.worleyScale0)},
     worleyScale1: ${n(water.worleyScale1)},
     refractionStrength: ${n(water.refractionStrength)},
+  },
+
+  sky: {
+    horizon: '${sky.horizon}',
+    zenith:  '${sky.zenith}',
   },
 
   depth: {
@@ -89,6 +95,11 @@ export function mountDevPanel(config) {
     label: 'Refraction',
     min: 0.0, max: 0.3, step: 0.001,
   });
+
+  // ——— Sky ———
+  const skyFolder = pane.addFolder({ title: 'Sky', expanded: false });
+  skyFolder.addBinding(config.sky, 'horizon', { label: 'Horizon', view: 'color' });
+  skyFolder.addBinding(config.sky, 'zenith', { label: 'Zenith', view: 'color' });
 
   // ——— Depth effect ———
   const depthFolder = pane.addFolder({ title: 'Depth Effect', expanded: false });
