@@ -594,7 +594,7 @@ async function init() {
     const flutterAmp = 0.03;  // oscillation amplitude
     const flutterHz  = 1.1;   // oscillation speed
     const sailLean   = windBase + Math.sin(t * flutterHz) * flutterAmp;
-    // Sails rotate around Y (they face the ship's X axis already)
+    // Sail flutter: tilt on local X (broad face catches wind along ship length)
     boatObj.mainSail.rotation.x = sailLean * 0.6;
     boatObj.topSail.rotation.x  = sailLean * 0.8;
     boatObj.foreSail.rotation.x = sailLean * 0.7;
