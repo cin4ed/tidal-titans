@@ -19,9 +19,13 @@ import {
   uniform,
 } from 'three/tsl';
 import { gaussianBlur } from 'three/addons/tsl/display/GaussianBlurNode.js';
+import { inject } from '@vercel/analytics';
 
 import config from './config.js';
 import { createPirateShip } from './models/pirateShip.js';
+
+// Initialize Vercel Web Analytics
+inject();
 
 // ——— Wave height (CPU side, for boat physics only) ———
 // The visual water is rendered via TSL refraction; this formula only drives
