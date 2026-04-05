@@ -49,7 +49,9 @@ function waveNormal(x, z, t, eps = 0.15) {
 async function init() {
   // ——— Scene ———
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(config.water.colorDeep, config.fog.near, config.fog.far);
+  if (config.fog.enabled) {
+    scene.fog = new THREE.Fog(config.water.colorDeep, config.fog.near, config.fog.far);
+  }
 
   // TSL gradient sky — replaces the canvas texture sky
   scene.backgroundNode = normalWorld.y.mix(
@@ -330,6 +332,20 @@ async function init() {
     uWorleyScale0.value = water.worleyScale0;
     uWorleyScale1.value = water.worleyScale1;
     uRefractionStrength.value = water.refractionStrength;
+
+    // Scene fog reads from THREE.Fog instance, not config — keep in sync with dev panel
+    const fogCfg = config.fog;
+    if (fogCfg.enabled) {
+      if (!scene.fog) {
+        scene.fog = new THREE.Fog(water.colorDeep, fogCfg.near, fogCfg.far);
+      } else {
+        scene.fog.near = fogCfg.near;
+        scene.fog.far = fogCfg.far;
+        scene.fog.color.set(water.colorDeep);
+      }
+    } else {
+      scene.fog = null;
+    }
 
     // Animate underwater objects
     for (const obj of underwaterObjects.children) {

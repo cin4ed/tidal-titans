@@ -35,6 +35,7 @@ const config = {
   },
 
   fog: {
+    enabled: ${fog.enabled},
     near: ${n(fog.near, 1)},
     far:  ${n(fog.far, 1)},
   },
@@ -96,6 +97,7 @@ export function mountDevPanel(config) {
 
   // ——— Fog ———
   const fogFolder = pane.addFolder({ title: 'Fog', expanded: false });
+  fogFolder.addBinding(config.fog, 'enabled', { label: 'Enabled' });
   fogFolder.addBinding(config.fog, 'near', { label: 'near', min: 1,  max: 50,  step: 1 });
   fogFolder.addBinding(config.fog, 'far',  { label: 'far',  min: 10, max: 200, step: 1 });
 

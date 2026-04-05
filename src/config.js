@@ -34,6 +34,7 @@ const config = {
   },
 
   fog: {
+    enabled: true,
     near: 1,
     far:  200,
   },
