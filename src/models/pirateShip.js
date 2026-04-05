@@ -28,12 +28,15 @@ export function createPirateShip() {
   keel.position.set(0, -0.22, 0);
   boat.add(keel);
 
-  // ——— Bow (front) ———
-  const bowGeo = new THREE.CylinderGeometry(0, 1.05, 2.2, 4, 1);
+  // ——— Bow (front, +Z) ———
+  // Cone is along +Y by default (tip at +Y). Rotate +90° X so the tip points forward (+Z) and
+  // the base meets the hull — the old cylinder + Z/Y spins pointed the taper backward, so the
+  // flat hull face read as the "front" and the wedge looked like a stern.
+  const bowGeo = new THREE.ConeGeometry(1.05, 2.2, 4, 1);
   const bow = new THREE.Mesh(bowGeo, woodDark);
-  bow.rotation.z = Math.PI / 2;
-  bow.rotation.y = Math.PI / 4;
-  bow.position.set(0, 0.25, 3.45);
+  bow.rotation.x = Math.PI / 2;
+  // Hull front face at z = 2.9; cone half-height 1.1 → center z = 2.9 + 1.1 = 4.0 (base at 2.9, tip at 5.1)
+  bow.position.set(0, 0.25, 4.0);
   boat.add(bow);
 
   const bowCap = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.18, 0.35), woodLight);
@@ -92,7 +95,7 @@ export function createPirateShip() {
   const bowspritLen = 3.0;
   const bowsprit = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.08, bowspritLen, 6), woodLight);
   bowsprit.rotation.x = Math.PI / 2 - 0.3;
-  bowsprit.position.set(0, 1.55, 3.55);
+  bowsprit.position.set(0, 1.55, 4.35);
   boat.add(bowsprit);
 
   // ——— Main mast ———
@@ -139,11 +142,11 @@ export function createPirateShip() {
     rope.rotateX(Math.PI / 2);
     boat.add(rope);
   }
-  addRope(0, 7.85, 0.3, 0, 1.55, 4.2);
+  addRope(0, 7.85, 0.3, 0, 1.55, 4.85);
   addRope(0, 7.85, 0.3, 0, 1.42, -3.15);
   addRope(1.1, 1.0, 0.3, 0.06, 7.85, 0.3);
   addRope(-1.1, 1.0, 0.3, -0.06, 7.85, 0.3);
-  addRope(0, 6.35, 2.35, 0, 1.22, 3.85);
+  addRope(0, 6.35, 2.35, 0, 1.22, 4.05);
   addRope(0, 3.9, 0.3, 0, 3.9, 2.35);
 
   // ——— Cannons ———
@@ -198,7 +201,7 @@ export function createPirateShip() {
     jibGeo.setIndex([0, 1, 2, 0, 2, 1]);
     jibGeo.computeVertexNormals();
     const jib = new THREE.Mesh(jibGeo, sailMat);
-    jib.position.set(0, 1.3, 3);
+    jib.position.set(0, 1.3, 3.15);
     boat.add(jib);
   }
 
