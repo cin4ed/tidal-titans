@@ -58,7 +58,8 @@ export default config;
 `;
 }
 
-export function mountDevPanel(config) {
+export function mountDevPanel(config, options = {}) {
+  const { onCameraInitialZoomChange } = options;
   const pane = new Pane({ title: 'Scene', expanded: false });
 
   // ——— Boat wave physics ———
@@ -114,10 +115,15 @@ export function mountDevPanel(config) {
 
   // ——— Camera / Orbit ———
   const cameraFolder = pane.addFolder({ title: 'Camera / Orbit', expanded: false });
-  cameraFolder.addBinding(config.camera, 'distanceInitial', {
+  const initialZoomBinding = cameraFolder.addBinding(config.camera, 'distanceInitial', {
     label: 'Initial zoom',
     min: 1, max: 120, step: 0.5,
   });
+  if (onCameraInitialZoomChange) {
+    initialZoomBinding.on('change', () => {
+      onCameraInitialZoomChange(config.camera.distanceInitial);
+    });
+  }
   cameraFolder.addBinding(config.camera, 'distanceMin', {
     label: 'Zoom min',
     min: 1, max: 80, step: 0.5,

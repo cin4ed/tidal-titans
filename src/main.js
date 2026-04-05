@@ -429,7 +429,15 @@ async function init() {
   // ——— Dev panel (development only) ———
   if (import.meta.env.DEV) {
     import('./dev-panel.js').then(({ mountDevPanel }) => {
-      mountDevPanel(config);
+      mountDevPanel(config, {
+        onCameraInitialZoomChange: (d) => {
+          camOrbit.distance = THREE.MathUtils.clamp(
+            d,
+            config.camera.distanceMin,
+            config.camera.distanceMax,
+          );
+        },
+      });
     });
   }
 }
