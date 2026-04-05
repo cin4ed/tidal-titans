@@ -44,6 +44,21 @@ const config = {
     distanceMax:  50,
     distanceStep: 1,
   },
+
+  combat: {
+    muzzleSpeed: 45,
+    gravity: 15,
+    volleyStagger: 0.07,
+    cooldown: 0.65,
+    powerMin: 0.4,
+    powerMax: 1,
+    maxChargeTime: 1.15,
+    rangeAtMinPower: 70,
+    rangeAtMaxPower: 220,
+    trajectoryPreviewMuzzleIndex: 1,
+    trajectorySampleDt: 1 / 60,
+    trajectoryMaxSteps: 420,
+  },
 };
 
 export default config;

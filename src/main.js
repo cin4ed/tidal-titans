@@ -278,18 +278,8 @@ async function init() {
   const timer = new THREE.Timer();
 
   // ——— Port broadside (pointer locked: hold LMB to charge, release to fire) ———
-  const CANNON_MUZZLE_SPEED = 45;
-  const CANNON_GRAVITY = 15;
-  const CANNON_VOLLEY_STAGGER = 0.07;
-  const CANNON_COOLDOWN = 0.65;
-  const CANNON_POWER_MIN = 0.4;
-  const CANNON_POWER_MAX = 1.0;
-  const CANNON_MAX_CHARGE_TIME = 1.15;
-  const CANNON_RANGE_AT_MIN_POWER = 70;
-  const CANNON_RANGE_AT_MAX_POWER = 220;
-  const CANNON_TRAJECTORY_MUZZLE_INDEX = 1;
-  const CANNON_TRAJ_DT = 1 / 60;
-  const CANNON_TRAJ_MAX_STEPS = 420;
+  // Tuning: config.combat (dev panel + Export Config).
+  const CANNON_TRAJ_BUFFER_STEPS = 800;
 
   const cannonBallGeo = new THREE.SphereGeometry(0.12, 8, 8);
   const cannonBallMat = new THREE.MeshStandardMaterial({
@@ -313,7 +303,7 @@ async function init() {
   const trajP = new THREE.Vector3();
   const trajV = new THREE.Vector3();
 
-  const trajVertCount = CANNON_TRAJ_MAX_STEPS + 2;
+  const trajVertCount = CANNON_TRAJ_BUFFER_STEPS + 2;
   const trajPosArr = new Float32Array(trajVertCount * 3);
   const trajGeom = new THREE.BufferGeometry();
   trajGeom.setAttribute('position', new THREE.BufferAttribute(trajPosArr, 3));
@@ -329,29 +319,32 @@ async function init() {
   cannonTrajectoryLine.frustumCulled = false;
   scene.add(cannonTrajectoryLine);
 
+  function cannonPowerBounds() {
+    const c = config.combat;
+    const lo = Math.min(c.powerMin, c.powerMax);
+    const hi = Math.max(c.powerMin, c.powerMax);
+    return { lo, hi, span: Math.max(1e-4, hi - lo) };
+  }
+
   function cannonPowerFromHoldSeconds(holdSec) {
-    return THREE.MathUtils.lerp(
-      CANNON_POWER_MIN,
-      CANNON_POWER_MAX,
-      THREE.MathUtils.clamp(holdSec / CANNON_MAX_CHARGE_TIME, 0, 1),
-    );
+    const c = config.combat;
+    const { lo, hi } = cannonPowerBounds();
+    const chargeT = Math.max(0.05, c.maxChargeTime);
+    return THREE.MathUtils.lerp(lo, hi, THREE.MathUtils.clamp(holdSec / chargeT, 0, 1));
   }
 
   function cannonMaxRangeForPower(powerScale) {
-    const u = THREE.MathUtils.clamp(
-      (powerScale - CANNON_POWER_MIN) / (CANNON_POWER_MAX - CANNON_POWER_MIN),
-      0,
-      1,
-    );
-    return THREE.MathUtils.lerp(CANNON_RANGE_AT_MIN_POWER, CANNON_RANGE_AT_MAX_POWER, u);
+    const c = config.combat;
+    const { lo, span } = cannonPowerBounds();
+    const u = THREE.MathUtils.clamp((powerScale - lo) / span, 0, 1);
+    const r0 = Math.min(c.rangeAtMinPower, c.rangeAtMaxPower);
+    const r1 = Math.max(c.rangeAtMinPower, c.rangeAtMaxPower);
+    return THREE.MathUtils.lerp(r0, r1, u);
   }
 
   function cannonMaxLifeForPower(powerScale) {
-    const u = THREE.MathUtils.clamp(
-      (powerScale - CANNON_POWER_MIN) / (CANNON_POWER_MAX - CANNON_POWER_MIN),
-      0,
-      1,
-    );
+    const { lo, span } = cannonPowerBounds();
+    const u = THREE.MathUtils.clamp((powerScale - lo) / span, 0, 1);
     return THREE.MathUtils.lerp(4.5, 8.5, u);
   }
 
@@ -386,10 +379,11 @@ async function init() {
     const tNow = timer.getElapsed();
     const holdSec = (performance.now() - cannonChargeStartWall) / 1000;
     const powerScale = cannonPowerFromHoldSeconds(holdSec);
-    cannonCooldownUntil = tNow + CANNON_COOLDOWN;
+    const cbt = config.combat;
+    cannonCooldownUntil = tNow + cbt.cooldown;
     const locals = boatObj.portCannonMuzzleLocal;
     for (let i = 0; i < locals.length; i++) {
-      cannonShotQueue.push({ fireAt: tNow + i * CANNON_VOLLEY_STAGGER, muzzleIndex: i, powerScale });
+      cannonShotQueue.push({ fireAt: tNow + i * cbt.volleyStagger, muzzleIndex: i, powerScale });
     }
   });
 
@@ -418,7 +412,10 @@ async function init() {
   function spawnCannonProjectile(muzzleIndex, powerScale) {
     if (!prepareCannonMuzzle(muzzleIndex)) return;
 
-    cannonSpawnVel.copy(portBroadsideDir).multiplyScalar(CANNON_MUZZLE_SPEED * powerScale).add(boatVelAtFire);
+    cannonSpawnVel
+      .copy(portBroadsideDir)
+      .multiplyScalar(config.combat.muzzleSpeed * powerScale)
+      .add(boatVelAtFire);
 
     const mesh = new THREE.Mesh(cannonBallGeo, cannonBallMat);
     mesh.position.copy(muzzleWorld);
@@ -450,14 +447,25 @@ async function init() {
     const holdSec = (performance.now() - cannonChargeStartWall) / 1000;
     const powerScale = cannonPowerFromHoldSeconds(holdSec);
 
-    if (!prepareCannonMuzzle(CANNON_TRAJECTORY_MUZZLE_INDEX)) {
+    const localsPreview = boatObj.portCannonMuzzleLocal;
+    const previewMuzzle = localsPreview
+      ? THREE.MathUtils.clamp(
+        Math.round(config.combat.trajectoryPreviewMuzzleIndex),
+        0,
+        localsPreview.length - 1,
+      )
+      : 1;
+    if (!prepareCannonMuzzle(previewMuzzle)) {
       cannonTrajectoryLine.visible = false;
       return;
     }
 
     const spawnX = muzzleWorld.x;
     const spawnZ = muzzleWorld.z;
-    trajV.copy(portBroadsideDir).multiplyScalar(CANNON_MUZZLE_SPEED * powerScale).add(boatVelAtFire);
+    trajV
+      .copy(portBroadsideDir)
+      .multiplyScalar(config.combat.muzzleSpeed * powerScale)
+      .add(boatVelAtFire);
     trajP.copy(muzzleWorld);
 
     let w = 0;
@@ -467,10 +475,15 @@ async function init() {
 
     const previewMaxR = cannonMaxRangeForPower(powerScale);
     const previewMaxSq = previewMaxR * previewMaxR;
-    const dtS = CANNON_TRAJ_DT;
-    const g = CANNON_GRAVITY;
+    const cbt = config.combat;
+    const dtS = Math.max(0.001, cbt.trajectorySampleDt);
+    const g = cbt.gravity;
+    const maxSteps = Math.min(
+      Math.max(1, Math.round(cbt.trajectoryMaxSteps)),
+      CANNON_TRAJ_BUFFER_STEPS,
+    );
 
-    for (let step = 0; step < CANNON_TRAJ_MAX_STEPS; step++) {
+    for (let step = 0; step < maxSteps; step++) {
       trajV.y -= g * dtS;
       trajP.x += trajV.x * dtS;
       trajP.y += trajV.y * dtS;
@@ -617,7 +630,7 @@ async function init() {
     for (let i = cannonProjectiles.length - 1; i >= 0; i--) {
       const p = cannonProjectiles[i];
       p.age += dt;
-      p.velocity.y -= CANNON_GRAVITY * dt;
+      p.velocity.y -= config.combat.gravity * dt;
       p.mesh.position.addScaledVector(p.velocity, dt);
       const dx = p.mesh.position.x - p.spawnX;
       const dz = p.mesh.position.z - p.spawnZ;

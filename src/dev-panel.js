@@ -8,6 +8,7 @@ function serializeConfig(config) {
   const fog = config.fog;
   const sky = config.sky;
   const cam = config.camera;
+  const cbt = config.combat;
   return `// Scene / render tuning — single source of truth.
 // Tweak values in the dev panel (npm run dev), then click "Export Config"
 // and paste the result here to make your changes permanent.
@@ -53,6 +54,21 @@ const config = {
     distanceMin:  ${n(cam.distanceMin, 1)},
     distanceMax:  ${n(cam.distanceMax, 1)},
     distanceStep: ${n(cam.distanceStep, 2)},
+  },
+
+  combat: {
+    muzzleSpeed: ${n(cbt.muzzleSpeed, 2)},
+    gravity: ${n(cbt.gravity, 2)},
+    volleyStagger: ${n(cbt.volleyStagger, 4)},
+    cooldown: ${n(cbt.cooldown, 3)},
+    powerMin: ${n(cbt.powerMin, 3)},
+    powerMax: ${n(cbt.powerMax, 3)},
+    maxChargeTime: ${n(cbt.maxChargeTime, 3)},
+    rangeAtMinPower: ${n(cbt.rangeAtMinPower, 1)},
+    rangeAtMaxPower: ${n(cbt.rangeAtMaxPower, 1)},
+    trajectoryPreviewMuzzleIndex: ${Math.round(cbt.trajectoryPreviewMuzzleIndex)},
+    trajectorySampleDt: ${n(cbt.trajectorySampleDt, 5)},
+    trajectoryMaxSteps: ${Math.round(cbt.trajectoryMaxSteps)},
   },
 };
 
@@ -149,6 +165,82 @@ export function mountDevPanel(config, options = {}) {
   cameraFolder.addBinding(config.camera, 'distanceStep', {
     label: 'Step size',
     min: 0.25, max: 5, step: 0.25,
+  });
+
+  // ——— Combat / cannons ———
+  const combatFolder = pane.addFolder({ title: 'Combat / Cannons', expanded: false });
+  const cb = config.combat;
+  combatFolder.addBinding(cb, 'muzzleSpeed', {
+    label: 'Muzzle speed',
+    min: 5,
+    max: 120,
+    step: 1,
+  });
+  combatFolder.addBinding(cb, 'gravity', {
+    label: 'Ball gravity',
+    min: 0,
+    max: 40,
+    step: 0.5,
+  });
+  combatFolder.addBinding(cb, 'volleyStagger', {
+    label: 'Volley stagger',
+    min: 0,
+    max: 0.35,
+    step: 0.01,
+  });
+  combatFolder.addBinding(cb, 'cooldown', {
+    label: 'Cooldown (s)',
+    min: 0.1,
+    max: 3,
+    step: 0.05,
+  });
+  combatFolder.addBinding(cb, 'powerMin', {
+    label: 'Power min (tap)',
+    min: 0.1,
+    max: 1,
+    step: 0.05,
+  });
+  combatFolder.addBinding(cb, 'powerMax', {
+    label: 'Power max (full)',
+    min: 0.5,
+    max: 2,
+    step: 0.05,
+  });
+  combatFolder.addBinding(cb, 'maxChargeTime', {
+    label: 'Max charge (s)',
+    min: 0.2,
+    max: 3,
+    step: 0.05,
+  });
+  combatFolder.addBinding(cb, 'rangeAtMinPower', {
+    label: 'Range @ min power',
+    min: 20,
+    max: 200,
+    step: 5,
+  });
+  combatFolder.addBinding(cb, 'rangeAtMaxPower', {
+    label: 'Range @ max power',
+    min: 50,
+    max: 400,
+    step: 10,
+  });
+  combatFolder.addBinding(cb, 'trajectoryPreviewMuzzleIndex', {
+    label: 'Preview muzzle',
+    min: 0,
+    max: 2,
+    step: 1,
+  });
+  combatFolder.addBinding(cb, 'trajectorySampleDt', {
+    label: 'Preview Δt',
+    min: 0.004,
+    max: 0.05,
+    step: 0.001,
+  });
+  combatFolder.addBinding(cb, 'trajectoryMaxSteps', {
+    label: 'Preview max steps',
+    min: 50,
+    max: 800,
+    step: 10,
   });
 
   // ——— Export config ———
