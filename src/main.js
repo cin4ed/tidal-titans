@@ -402,21 +402,18 @@ async function init() {
     const mainSailGeo = makeSail(4.2, 2.6, 0.55, 8, 8);
     const mainSail = new THREE.Mesh(mainSailGeo, sailMat);
     mainSail.position.set(0.05, 3.22, 0.3);
-    mainSail.rotation.y = Math.PI / 2;
     boat.add(mainSail);
 
     // Main upper sail
     const topSailGeo = makeSail(2.9, 1.9, 0.4, 6, 6);
     const topSail = new THREE.Mesh(topSailGeo, sailOld);
     topSail.position.set(0.04, 5.82, 0.3);
-    topSail.rotation.y = Math.PI / 2;
     boat.add(topSail);
 
     // Fore sail
     const foreSailGeo = makeSail(3.0, 1.9, 0.45, 6, 6);
     const foreSail = new THREE.Mesh(foreSailGeo, sailOld);
     foreSail.position.set(0.04, 2.6, 2.35);
-    foreSail.rotation.y = Math.PI / 2;
     boat.add(foreSail);
 
     // Triangular bowsprit sail (jib) — simplified as thin triangle via custom geo
