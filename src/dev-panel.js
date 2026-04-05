@@ -167,81 +167,165 @@ export function mountDevPanel(config, options = {}) {
     min: 0.25, max: 5, step: 0.25,
   });
 
+  // Tweakpane rows are mostly interactive children (slider, input). Browsers often do not show
+  // an ancestor's native `title` when the pointer is over those controls, so hints would appear
+  // to "not work". Use a small fixed tooltip that follows the pointer instead.
+  let hintTooltipEl;
+  let hintHideTimer;
+  function ensureHintTooltip() {
+    if (hintTooltipEl) return hintTooltipEl;
+    const el = document.createElement('div');
+    el.id = 'tp-dev-binding-hint';
+    el.setAttribute('role', 'tooltip');
+    Object.assign(el.style, {
+      position: 'fixed',
+      left: '0',
+      top: '0',
+      zIndex: '100000',
+      maxWidth: 'min(320px, calc(100vw - 24px))',
+      padding: '8px 10px',
+      fontSize: '12px',
+      lineHeight: '1.45',
+      fontFamily: 'system-ui, sans-serif',
+      color: '#fff',
+      background: 'rgba(22, 26, 34, 0.96)',
+      borderRadius: '6px',
+      boxShadow: '0 6px 24px rgba(0,0,0,0.4)',
+      pointerEvents: 'none',
+      visibility: 'hidden',
+      opacity: '0',
+      transition: 'opacity 0.08s ease',
+    });
+    document.body.appendChild(el);
+    hintTooltipEl = el;
+    return el;
+  }
+
+  function positionHintTooltip(el, clientX, clientY) {
+    const pad = 14;
+    const tw = el.offsetWidth;
+    const th = el.offsetHeight;
+    let x = clientX + pad;
+    let y = clientY + pad;
+    if (x + tw > window.innerWidth - 10) x = clientX - tw - pad;
+    if (y + th > window.innerHeight - 10) y = clientY - th - pad;
+    x = Math.max(10, Math.min(x, window.innerWidth - tw - 10));
+    y = Math.max(10, Math.min(y, window.innerHeight - th - 10));
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
+  }
+
+  function bindRowHoverHint(rowEl, hint) {
+    if (!hint) return;
+    const tip = ensureHintTooltip();
+
+    const onEnter = (e) => {
+      clearTimeout(hintHideTimer);
+      tip.textContent = hint;
+      tip.style.visibility = 'visible';
+      tip.style.opacity = '1';
+      // Next frame: width/height are reliable after text/layout.
+      requestAnimationFrame(() => {
+        positionHintTooltip(tip, e.clientX, e.clientY);
+      });
+    };
+    const onMove = (e) => {
+      if (tip.style.visibility !== 'visible') return;
+      positionHintTooltip(tip, e.clientX, e.clientY);
+    };
+    const onLeave = () => {
+      hintHideTimer = window.setTimeout(() => {
+        tip.style.opacity = '0';
+        tip.style.visibility = 'hidden';
+      }, 80);
+    };
+
+    rowEl.addEventListener('mouseenter', onEnter);
+    rowEl.addEventListener('mousemove', onMove);
+    rowEl.addEventListener('mouseleave', onLeave);
+  }
+
+  function bindWithHint(folder, target, key, params, hint) {
+    const api = folder.addBinding(target, key, params);
+    bindRowHoverHint(api.element, hint);
+    return api;
+  }
+
   // ——— Combat / cannons ———
   const combatFolder = pane.addFolder({ title: 'Combat / Cannons', expanded: false });
   const cb = config.combat;
-  combatFolder.addBinding(cb, 'muzzleSpeed', {
+  bindWithHint(combatFolder, cb, 'muzzleSpeed', {
     label: 'Muzzle speed',
     min: 5,
     max: 120,
     step: 1,
-  });
-  combatFolder.addBinding(cb, 'gravity', {
+  }, 'Base speed along the port broadside (horizontal). Multiplied by charge power; boat forward speed is added to the shot.');
+  bindWithHint(combatFolder, cb, 'gravity', {
     label: 'Ball gravity',
     min: 0,
     max: 40,
     step: 0.5,
-  });
-  combatFolder.addBinding(cb, 'volleyStagger', {
+  }, 'Downward acceleration on cannonballs and on the yellow trajectory preview (matches gameplay integration).');
+  bindWithHint(combatFolder, cb, 'volleyStagger', {
     label: 'Volley stagger',
     min: 0,
     max: 0.35,
     step: 0.01,
-  });
-  combatFolder.addBinding(cb, 'cooldown', {
+  }, 'Delay between each of the three port shots after you release the mouse (seconds).');
+  bindWithHint(combatFolder, cb, 'cooldown', {
     label: 'Cooldown (s)',
     min: 0.1,
     max: 3,
     step: 0.05,
-  });
-  combatFolder.addBinding(cb, 'powerMin', {
+  }, 'Seconds after firing a volley before you can start charging again (game time).');
+  bindWithHint(combatFolder, cb, 'powerMin', {
     label: 'Power min (tap)',
     min: 0.1,
     max: 1,
     step: 0.05,
-  });
-  combatFolder.addBinding(cb, 'powerMax', {
+  }, 'Shot power when you release almost immediately (also scales muzzle speed, range, and projectile lifetime).');
+  bindWithHint(combatFolder, cb, 'powerMax', {
     label: 'Power max (full)',
     min: 0.5,
     max: 2,
     step: 0.05,
-  });
-  combatFolder.addBinding(cb, 'maxChargeTime', {
+  }, 'Shot power after holding the charge for max charge time (lerped from power min).');
+  bindWithHint(combatFolder, cb, 'maxChargeTime', {
     label: 'Max charge (s)',
     min: 0.2,
     max: 3,
     step: 0.05,
-  });
-  combatFolder.addBinding(cb, 'rangeAtMinPower', {
+  }, 'How long (seconds) to hold to reach max power; shorter holds linearly interpolate toward power min.');
+  bindWithHint(combatFolder, cb, 'rangeAtMinPower', {
     label: 'Range @ min power',
     min: 20,
     max: 200,
     step: 5,
-  });
-  combatFolder.addBinding(cb, 'rangeAtMaxPower', {
+  }, 'Maximum horizontal distance from spawn before a cannonball is removed (at minimum power).');
+  bindWithHint(combatFolder, cb, 'rangeAtMaxPower', {
     label: 'Range @ max power',
     min: 50,
     max: 400,
     step: 10,
-  });
-  combatFolder.addBinding(cb, 'trajectoryPreviewMuzzleIndex', {
+  }, 'Same as range @ min power, at full charge; values in between are interpolated by power.');
+  bindWithHint(combatFolder, cb, 'trajectoryPreviewMuzzleIndex', {
     label: 'Preview muzzle',
     min: 0,
     max: 2,
     step: 1,
-  });
-  combatFolder.addBinding(cb, 'trajectorySampleDt', {
+  }, 'Which port muzzle (0–2) the yellow arc is drawn from while you charge.');
+  bindWithHint(combatFolder, cb, 'trajectorySampleDt', {
     label: 'Preview Δt',
     min: 0.004,
     max: 0.05,
     step: 0.001,
-  });
-  combatFolder.addBinding(cb, 'trajectoryMaxSteps', {
+  }, 'Simulation timestep for the preview arc only (smaller = smoother, more CPU steps per frame).');
+  bindWithHint(combatFolder, cb, 'trajectoryMaxSteps', {
     label: 'Preview max steps',
     min: 50,
     max: 800,
     step: 10,
-  });
+  }, 'Cap on preview integration steps; also clamped by an internal buffer in main.js (longer arcs need a higher cap there).');
 
   // ——— Export config ———
   pane.addBlade({ view: 'separator' });

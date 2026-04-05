@@ -46,7 +46,7 @@ tidal-titans-2/
 ├── src/
 │   ├── main.js         # Scene, WebGPU renderer, TSL water, post pipeline, boat, cannons, camera, input
 │   ├── config.js       # config — scene + combat tuning (waves, water, sky, depth, fog, camera, combat)
-│   ├── dev-panel.js    # Tweakpane UI — dynamic import in dev only
+│   ├── dev-panel.js    # Tweakpane UI — dynamic import in dev only; combat rows use custom pointer-following hints
 │   └── models/
 │       └── pirateShip.js   # createPirateShip() — procedural ship group + sail/flag refs for animation
 │
@@ -86,7 +86,7 @@ Default export: `**config**`. The dev panel edits this object in memory; **Expor
 | Depth blend           | `config.depth.near`, `config.depth.far`                                             | Remap range for water vs backdrop depth (tuned for linear depth units).                                                                                                                                                                                                                                                                                                                 |
 | Fog                   | `config.fog.enabled`, `config.fog.near`, `config.fog.far`                           | When enabled, `THREE.Fog` on the scene (boat, underwater props, sun, etc.); near/far/color synced from config each frame.                                                                                                                                                                                                                                                               |
 | Orbit zoom            | `config.camera` — `distanceInitial`, `distanceMin`, `distanceMax`, `distanceStep`   | Scroll-wheel stepped dolly on `camOrbit.distance`; initial value clamped to min/max.                                                                                                                                                                                                                                                                                                    |
-| Combat / cannons      | `config.combat`                                                                     | Port broadside tuning read **live** from `config` in `main.js`: `muzzleSpeed`, `gravity`, `volleyStagger`, `cooldown`, `powerMin` / `powerMax`, `maxChargeTime`, `rangeAtMinPower` / `rangeAtMaxPower`, `trajectoryPreviewMuzzleIndex`, `trajectorySampleDt`, `trajectoryMaxSteps`. Dev panel: **Combat / Cannons** folder. **Export Config** includes the full `combat` block.         |
+| Combat / cannons      | `config.combat`                                                                     | Port broadside tuning read **live** from `config` in `main.js`: `muzzleSpeed`, `gravity`, `volleyStagger`, `cooldown`, `powerMin` / `powerMax`, `maxChargeTime`, `rangeAtMinPower` / `rangeAtMaxPower`, `trajectoryPreviewMuzzleIndex`, `trajectorySampleDt`, `trajectoryMaxSteps`. Dev panel: **Combat / Cannons** folder (hover any part of a row for a short explanation). **Export Config** includes the full `combat` block.         |
 
 
 There is **no** separate GLSL file: water appearance is entirely **TSL node graphs** in `main.js`.
@@ -190,6 +190,8 @@ if (import.meta.env.DEV) {
 ```
 
 - Folders include **Boat Wave Physics**, **Water Appearance**, **Sky**, **Depth Effect**, **Fog**, **Camera / Orbit**, and **Combat / Cannons**. **Export Config** serializes the entire default export including `**combat`**.
+
+**`src/dev-panel.js`**: `mountDevPanel()` wires Tweakpane; `serializeConfig()` powers **Export Config**. Tweakpane has **no** built-in per-control description/tooltip API (its internal “tooltip” is the slider value bubble while dragging). For **Combat / Cannons**, each binding goes through `bindWithHint` → `bindRowHoverHint`: listeners on the binding row’s `api.element` show a shared fixed-position `#tp-dev-binding-hint` div on `document.body` (`role="tooltip"`, `pointer-events: none`) that follows the cursor. Native `title` on the row alone is unreliable because hovers usually land on nested slider/input nodes. Hint copy should stay aligned with cannon behavior in `main.js`.
 
 Production builds omit this import via tree-shaking.
 
