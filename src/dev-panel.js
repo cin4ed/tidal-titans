@@ -1,43 +1,34 @@
 import { Pane } from 'tweakpane';
 
-// Serializes the current config back to a config.js file string.
 function serializeConfig(config) {
   const n = (v, d = 4) => Number(v.toFixed(d));
-  return `// Ocean shader configuration — single source of truth.
+  return `// Ocean configuration — single source of truth.
 // Tweak values in the dev panel (npm run dev), then click "Export Config"
 // and paste the result here to make your changes permanent.
 
 const oceanConfig = {
-  // Wave layers: each layer adds sin(x*freq + t*speed)*amp
+  // Wave layers used by JS physics for boat bobbing (waveHeight / waveNormal).
+  // These are NOT visual — the water surface is rendered via TSL refraction.
   wave1: { freq: ${n(config.wave1.freq)}, speed: ${n(config.wave1.speed)}, amp: ${n(config.wave1.amp)} },
   wave2: { freq: ${n(config.wave2.freq)}, speed: ${n(config.wave2.speed)}, amp: ${n(config.wave2.amp)} },
   wave3: { freq: ${n(config.wave3.freq)}, speed: ${n(config.wave3.speed)}, amp: ${n(config.wave3.amp)} },
   wave4: { freq: ${n(config.wave4.freq)}, speed: ${n(config.wave4.speed)}, amp: ${n(config.wave4.amp)} },
 
-  // Water colors (hex)
-  deepColor:  '${config.deepColor}',
-  midColor:   '${config.midColor}',
-  lightColor: '${config.lightColor}',
-  foamColor:  '${config.foamColor}',
+  // Water surface colors (hex)
+  waterColorDeep:  '${config.waterColorDeep}',
+  waterColorLight: '${config.waterColorLight}',
 
-  // Cel (toon) shading bands
-  toonSteps: ${Math.round(config.toonSteps)},
+  // How fast the worley noise scrolls (controls wave animation speed)
+  noiseSpeed: ${n(config.noiseSpeed)},
 
-  // Specular highlight
-  specPower:     ${n(config.specPower)},
-  specThreshold: ${n(config.specThreshold)},
-  specIntensity: ${n(config.specIntensity)},
+  // Refraction distortion amount (0 = no distortion, 0.15 = strong)
+  refractionStrength: ${n(config.refractionStrength)},
 
-  // Fresnel rim
-  fresnelPower:     ${n(config.fresnelPower)},
-  fresnelIntensity: ${n(config.fresnelIntensity)},
+  // Depth range for the depth-blend effect
+  depthNear: ${n(config.depthNear)},
+  depthFar:   ${n(config.depthFar)},
 
-  // Foam crest
-  foamStart: ${n(config.foamStart)},
-  foamEnd:   ${n(config.foamEnd)},
-  foamMax:   ${n(config.foamMax)},
-
-  // Distance fog
+  // Fog
   fogNear: ${n(config.fogNear, 1)},
   fogFar:  ${n(config.fogFar, 1)},
 };
@@ -49,9 +40,8 @@ export default oceanConfig;
 export function mountDevPanel(config) {
   const pane = new Pane({ title: 'Ocean Shader', expanded: false });
 
-  // ——— Waves ———
-  const wavesFolder = pane.addFolder({ title: 'Waves', expanded: false });
-
+  // ——— Boat wave physics ———
+  const wavesFolder = pane.addFolder({ title: 'Boat Wave Physics', expanded: false });
   [1, 2, 3, 4].forEach((i) => {
     const key = `wave${i}`;
     const wf = wavesFolder.addFolder({ title: `Layer ${i}`, expanded: false });
@@ -60,42 +50,31 @@ export function mountDevPanel(config) {
     wf.addBinding(config[key], 'amp',   { label: 'amp',   min: 0.0, max: 2.0, step: 0.01 });
   });
 
-  // ——— Colors ———
-  const colorsFolder = pane.addFolder({ title: 'Colors', expanded: false });
-  colorsFolder.addBinding(config, 'deepColor',  { label: 'Deep',  view: 'color' });
-  colorsFolder.addBinding(config, 'midColor',   { label: 'Mid',   view: 'color' });
-  colorsFolder.addBinding(config, 'lightColor', { label: 'Light', view: 'color' });
-  colorsFolder.addBinding(config, 'foamColor',  { label: 'Foam',  view: 'color' });
+  // ——— Water appearance ———
+  const waterFolder = pane.addFolder({ title: 'Water Appearance', expanded: true });
+  waterFolder.addBinding(config, 'waterColorDeep',  { label: 'Deep color',  view: 'color' });
+  waterFolder.addBinding(config, 'waterColorLight', { label: 'Light color', view: 'color' });
+  waterFolder.addBinding(config, 'noiseSpeed', {
+    label: 'Noise speed',
+    min: 0.0, max: 3.0, step: 0.01,
+  });
+  waterFolder.addBinding(config, 'refractionStrength', {
+    label: 'Refraction',
+    min: 0.0, max: 0.3, step: 0.001,
+  });
 
-  // ——— Toon shading ———
-  const toonFolder = pane.addFolder({ title: 'Toon Shading', expanded: false });
-  toonFolder.addBinding(config, 'toonSteps', { label: 'bands', min: 1, max: 8, step: 1 });
-
-  // ——— Specular ———
-  const specFolder = pane.addFolder({ title: 'Specular', expanded: false });
-  specFolder.addBinding(config, 'specPower',     { label: 'power',     min: 1,   max: 128, step: 1   });
-  specFolder.addBinding(config, 'specThreshold', { label: 'threshold', min: 0.0, max: 1.0, step: 0.01 });
-  specFolder.addBinding(config, 'specIntensity', { label: 'intensity', min: 0.0, max: 2.0, step: 0.01 });
-
-  // ——— Fresnel ———
-  const fresnelFolder = pane.addFolder({ title: 'Fresnel', expanded: false });
-  fresnelFolder.addBinding(config, 'fresnelPower',     { label: 'power',     min: 0.5, max: 8.0, step: 0.1  });
-  fresnelFolder.addBinding(config, 'fresnelIntensity', { label: 'intensity', min: 0.0, max: 1.0, step: 0.01 });
-
-  // ——— Foam ———
-  const foamFolder = pane.addFolder({ title: 'Foam', expanded: false });
-  foamFolder.addBinding(config, 'foamStart', { label: 'start', min: -1.0, max: 2.0, step: 0.01 });
-  foamFolder.addBinding(config, 'foamEnd',   { label: 'end',   min:  0.0, max: 3.0, step: 0.01 });
-  foamFolder.addBinding(config, 'foamMax',   { label: 'max',   min:  0.0, max: 1.0, step: 0.01 });
+  // ——— Depth effect ———
+  const depthFolder = pane.addFolder({ title: 'Depth Effect', expanded: false });
+  depthFolder.addBinding(config, 'depthNear', { label: 'near', min: -0.01, max: 0.0, step: 0.0001 });
+  depthFolder.addBinding(config, 'depthFar',  { label: 'far',  min: 0.01,  max: 0.2, step: 0.001  });
 
   // ——— Fog ———
   const fogFolder = pane.addFolder({ title: 'Fog', expanded: false });
-  fogFolder.addBinding(config, 'fogNear', { label: 'near', min:  1,  max: 100, step: 1 });
-  fogFolder.addBinding(config, 'fogFar',  { label: 'far',  min: 50,  max: 300, step: 1 });
+  fogFolder.addBinding(config, 'fogNear', { label: 'near', min: 1,  max: 50,  step: 1 });
+  fogFolder.addBinding(config, 'fogFar',  { label: 'far',  min: 10, max: 200, step: 1 });
 
   // ——— Export config ———
   pane.addBlade({ view: 'separator' });
-
   const exportBtn = pane.addButton({ title: 'Export Config' });
   exportBtn.on('click', () => {
     const output = serializeConfig(config);
@@ -103,7 +82,6 @@ export function mountDevPanel(config) {
       exportBtn.title = 'Copied!';
       setTimeout(() => { exportBtn.title = 'Export Config'; }, 2000);
     }).catch(() => {
-      // Fallback: log to console if clipboard access is denied
       console.log('%c[Ocean Config — paste into src/config.js]', 'font-weight:bold');
       console.log(output);
       exportBtn.title = 'See console';
