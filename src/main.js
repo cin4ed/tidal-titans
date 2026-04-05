@@ -53,9 +53,13 @@ async function init() {
     scene.fog = new THREE.Fog(config.water.colorDeep, config.fog.near, config.fog.far);
   }
 
+  // Water tint uniforms — synced each frame so dev-panel colors update TSL water + sky
+  const uWaterColorDeep = uniform(new THREE.Color(config.water.colorDeep));
+  const uWaterColorLight = uniform(new THREE.Color(config.water.colorLight));
+
   // TSL gradient sky — replaces the canvas texture sky
   scene.backgroundNode = normalWorld.y.mix(
-    color(config.water.colorDeep),
+    uWaterColorDeep,
     color(0x0066ff)
   );
 
@@ -166,9 +170,7 @@ async function init() {
   const waterLayer1 = mx_worley_noise_float(floorUV.mul(uWorleyScale1).add(t));
   const waterIntensity = waterLayer0.mul(waterLayer1);
 
-  const waterColorDeep  = color(config.water.colorDeep);
-  const waterColorLight = color(config.water.colorLight);
-  const waterColor = waterIntensity.mul(1.4).mix(waterColorDeep, waterColorLight);
+  const waterColor = waterIntensity.mul(1.4).mix(uWaterColorDeep, uWaterColorLight);
 
   // linearDepth() = linear depth of this mesh's fragment
   const depth = linearDepth();
@@ -332,6 +334,8 @@ async function init() {
     uWorleyScale0.value = water.worleyScale0;
     uWorleyScale1.value = water.worleyScale1;
     uRefractionStrength.value = water.refractionStrength;
+    uWaterColorDeep.value.set(water.colorDeep);
+    uWaterColorLight.value.set(water.colorLight);
 
     // Scene fog reads from THREE.Fog instance, not config — keep in sync with dev panel
     const fogCfg = config.fog;
