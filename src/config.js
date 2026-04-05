@@ -4,6 +4,8 @@
 
 const config = {
   waves: {
+    // >1 = longer wavelengths, fewer waves per unit area (boat + GPU stay matched).
+    spatialScale: 1,
     wave1: { freq: 0.5, speed: 1.2, amp: 0.2 },
     wave2: { freq: 0.7, speed: 0.8, amp: 0.4 },
     wave3: { freq: 0.3, speed: 1.5, amp: 0.3 },

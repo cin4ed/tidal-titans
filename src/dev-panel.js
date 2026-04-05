@@ -14,6 +14,7 @@ function serializeConfig(config) {
 
 const config = {
   waves: {
+    spatialScale: ${n(w.spatialScale)},
     wave1: { freq: ${n(w.wave1.freq)}, speed: ${n(w.wave1.speed)}, amp: ${n(w.wave1.amp)} },
     wave2: { freq: ${n(w.wave2.freq)}, speed: ${n(w.wave2.speed)}, amp: ${n(w.wave2.amp)} },
     wave3: { freq: ${n(w.wave3.freq)}, speed: ${n(w.wave3.speed)}, amp: ${n(w.wave3.amp)} },
@@ -64,6 +65,12 @@ export function mountDevPanel(config, options = {}) {
 
   // ——— Boat wave physics ———
   const wavesFolder = pane.addFolder({ title: 'Boat Wave Physics', expanded: false });
+  wavesFolder.addBinding(config.waves, 'spatialScale', {
+    label: 'Spatial scale',
+    min: 0.25,
+    max: 8,
+    step: 0.05,
+  });
   [1, 2, 3, 4].forEach((i) => {
     const key = `wave${i}`;
     const wf = wavesFolder.addFolder({ title: `Layer ${i}`, expanded: false });

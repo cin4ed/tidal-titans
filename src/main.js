@@ -28,11 +28,14 @@ import { createPirateShip } from './models/pirateShip.js';
 // the boat bobbing and tilt — so the GLSL/TSL sync constraint is gone.
 function waveHeight(x, z, t) {
   const { wave1, wave2, wave3, wave4 } = config.waves;
+  const s = Math.max(0.01, config.waves.spatialScale);
+  const sx = x / s;
+  const sz = z / s;
   let h = 0;
-  h += Math.sin(x * wave1.freq + t * wave1.speed) * wave1.amp;
-  h += Math.sin(z * wave2.freq + t * wave2.speed) * wave2.amp;
-  h += Math.sin((x + z) * wave3.freq + t * wave3.speed) * wave3.amp;
-  h += Math.sin(x * wave4.freq + z * 0.8 + t * wave4.speed) * wave4.amp;
+  h += Math.sin(sx * wave1.freq + t * wave1.speed) * (wave1.amp * s);
+  h += Math.sin(sz * wave2.freq + t * wave2.speed) * (wave2.amp * s);
+  h += Math.sin((sx + sz) * wave3.freq + t * wave3.speed) * (wave3.amp * s);
+  h += Math.sin(sx * wave4.freq + sz * 0.8 + t * wave4.speed) * (wave4.amp * s);
   return h;
 }
 
@@ -143,6 +146,7 @@ async function init() {
   const uW4Freq  = uniform(config.waves.wave4.freq);
   const uW4Speed = uniform(config.waves.wave4.speed);
   const uW4Amp   = uniform(config.waves.wave4.amp);
+  const uWaveSpatialScale = uniform(config.waves.spatialScale);
   const uWaveVisualScale = uniform(config.water.waveVisualScale);
 
   // Worley / refraction uniforms
@@ -152,14 +156,14 @@ async function init() {
 
   // ——— TSL vertex wave displacement ———
   // Mirrors JS waveHeight() exactly; positionLocal is object-space (plane lies in XZ).
-  const px = positionLocal.x;
-  const pz = positionLocal.z;
+  const px = positionLocal.x.div(uWaveSpatialScale);
+  const pz = positionLocal.z.div(uWaveSpatialScale);
 
   const vY =
-    sin(px.mul(uW1Freq).add(time.mul(uW1Speed))).mul(uW1Amp)
-    .add(sin(pz.mul(uW2Freq).add(time.mul(uW2Speed))).mul(uW2Amp))
-    .add(sin(px.add(pz).mul(uW3Freq).add(time.mul(uW3Speed))).mul(uW3Amp))
-    .add(sin(px.mul(uW4Freq).add(pz.mul(0.8)).add(time.mul(uW4Speed))).mul(uW4Amp));
+    sin(px.mul(uW1Freq).add(time.mul(uW1Speed))).mul(uW1Amp.mul(uWaveSpatialScale))
+    .add(sin(pz.mul(uW2Freq).add(time.mul(uW2Speed))).mul(uW2Amp.mul(uWaveSpatialScale)))
+    .add(sin(px.add(pz).mul(uW3Freq).add(time.mul(uW3Speed))).mul(uW3Amp.mul(uWaveSpatialScale)))
+    .add(sin(px.mul(uW4Freq).add(pz.mul(0.8)).add(time.mul(uW4Speed))).mul(uW4Amp.mul(uWaveSpatialScale)));
 
   const displacedPosition = positionLocal.add(vec3(0, vY.mul(uWaveVisualScale), 0));
 
@@ -330,6 +334,7 @@ async function init() {
     uW2Freq.value  = w.wave2.freq;  uW2Speed.value = w.wave2.speed; uW2Amp.value = w.wave2.amp;
     uW3Freq.value  = w.wave3.freq;  uW3Speed.value = w.wave3.speed; uW3Amp.value = w.wave3.amp;
     uW4Freq.value  = w.wave4.freq;  uW4Speed.value = w.wave4.speed; uW4Amp.value = w.wave4.amp;
+    uWaveSpatialScale.value = Math.max(0.01, w.spatialScale);
     uWaveVisualScale.value = water.waveVisualScale;
     uNoiseSpeed.value = water.noiseSpeed;
     uWorleyScale0.value = water.worleyScale0;
