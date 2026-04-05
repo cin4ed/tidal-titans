@@ -45,7 +45,7 @@ tidal-titans-2/
 │
 ├── src/
 │   ├── main.js         # Scene, WebGPU renderer, TSL water, post pipeline, boat motion, camera, input
-│   ├── config.js       # oceanConfig — single source of truth for waves, water look, depth, fog
+│   ├── config.js       # config — nested scene tuning (waves, water, depth, fog, camera)
 │   ├── dev-panel.js    # Tweakpane UI — dynamic import in dev only
 │   └── models/
 │       └── pirateShip.js   # createPirateShip() — procedural ship group + sail/flag refs for animation
@@ -70,17 +70,18 @@ tidal-titans-2/
 
 ## src/config.js
 
-Default export: **`oceanConfig`**. The dev panel edits this object in memory; **Export Config** copies a full `config.js` snippet to the clipboard — paste into `src/config.js` to persist.
+Default export: **`config`**. The dev panel edits this object in memory; **Export Config** copies a full `config.js` snippet to the clipboard — paste into `src/config.js` to persist.
 
-| Group | Keys | Role |
+| Group | Path | Role |
 | ----- | ---- | ---- |
-| Wave layers | `wave1`–`wave4` — each `{ freq, speed, amp }` | Used by **CPU** `waveHeight` / `waveNormal` (boat bob/tilt) and mirrored in **TSL** vertex displacement (scaled by `waveVisualScale` for the mesh). |
-| Water colors | `waterColorDeep`, `waterColorLight` (hex) | Worley-mixed surface tint in TSL. |
-| Visual scale | `waveVisualScale` | Multiplies vertex wave height on the water plane only (0 = flat water, physics unchanged). |
-| Worley motion / scale | `noiseSpeed`, `worleyScale0`, `worleyScale1` | Animated surface variation and refraction mask. |
-| Refraction | `refractionStrength` | Screen-space UV offset strength. |
-| Depth blend | `depthNear`, `depthFar` | Remap range for water vs backdrop depth (tuned for linear depth units). |
-| Fog | `fogNear`, `fogFar` | `THREE.Fog` on the scene (boat, underwater props, sun, etc.). |
+| Wave layers | `config.waves.wave1`–`wave4` — each `{ freq, speed, amp }` | Used by **CPU** `waveHeight` / `waveNormal` (boat bob/tilt) and mirrored in **TSL** vertex displacement (scaled by `config.water.waveVisualScale` for the mesh). |
+| Water colors | `config.water.colorDeep`, `config.water.colorLight` (hex) | Worley-mixed surface tint in TSL; `colorDeep` also seeds scene fog color at init. |
+| Visual scale | `config.water.waveVisualScale` | Multiplies vertex wave height on the water plane only (0 = flat water, physics unchanged). |
+| Worley motion / scale | `config.water.noiseSpeed`, `config.water.worleyScale0`, `config.water.worleyScale1` | Animated surface variation and refraction mask. |
+| Refraction | `config.water.refractionStrength` | Screen-space UV offset strength. |
+| Depth blend | `config.depth.near`, `config.depth.far` | Remap range for water vs backdrop depth (tuned for linear depth units). |
+| Fog | `config.fog.near`, `config.fog.far` | `THREE.Fog` on the scene (boat, underwater props, sun, etc.). |
+| Orbit zoom | `config.camera` — `distanceInitial`, `distanceMin`, `distanceMax`, `distanceStep` | Scroll-wheel stepped dolly on `camOrbit.distance`; initial value clamped to min/max. |
 
 There is **no** separate GLSL file: water appearance is entirely **TSL node graphs** in `main.js`.
 
@@ -95,11 +96,11 @@ There is **no** separate GLSL file: water appearance is entirely **TSL node grap
 - **`waveHeight(x, z, t)`** — same layered sine recipe as in TSL (must stay aligned).
 - **`waveNormal(x, z, t)`** — finite-difference gradient for pitch/roll.
 
-These read **`oceanConfig.wave1`–`wave4` only**. They do **not** use `waveVisualScale`; that affects only the rendered water mesh.
+These read **`config.waves.wave1`–`wave4` only**. They do **not** use `config.water.waveVisualScale`; that affects only the rendered water mesh.
 
 ### 2. Scene & renderer
 
-- **`THREE.Scene`** + **`THREE.Fog`** using `oceanConfig` fog distances and deep water color (`0x0487e2` in code — keep in sync with `waterColorDeep` when retuning).
+- **`THREE.Scene`** + **`THREE.Fog`** using `config.water.colorDeep` and `config.fog.near` / `config.fog.far` (sky gradient still uses a separate horizon hex in TSL — align palette when retuning).
 - **`scene.backgroundNode`**: TSL mix on `normalWorld.y` (gradient sky), not a canvas texture.
 - **`THREE.PerspectiveCamera`** (FOV 55, **near 0.25**, far 500).
 - **`THREE.WebGPURenderer`**: antialias, sRGB output, pixel ratio capped at 2.
@@ -113,8 +114,8 @@ These read **`oceanConfig.wave1`–`wave4` only**. They do **not** use `waveVisu
 ### 4. TSL water (`MeshBasicNodeMaterial`)
 
 - **Geometry**: `PlaneGeometry(220, 220, 200, 200)` rotated −90° on X (lies in XZ).
-- **Vertex**: `positionLocal` displaced in Y by a TSL expression that **mirrors** `waveHeight`, times **`uniform(oceanConfig.waveVisualScale)`**.
-- **Uniforms**: `uniform(...)` nodes for each wave component and Worley/refraction parameters; **each frame** the animation loop assigns `.value` from `oceanConfig` (so Tweakpane and exported config both apply).
+- **Vertex**: `positionLocal` displaced in Y by a TSL expression that **mirrors** `waveHeight`, times **`uniform(config.water.waveVisualScale)`** (initial uniform value from `config` at material setup).
+- **Uniforms**: `uniform(...)` nodes for each wave component and Worley/refraction parameters; **each frame** the animation loop assigns `.value` from `config.waves` / `config.water` (so Tweakpane and exported config both apply).
 - **Fragment**: Worley-based `waterColor`; **backdrop** samples the scene via `viewportSharedTexture` with refraction UVs and depth tests so geometry above the water is not incorrectly refracted. Transparency enabled for the water mesh.
 
 ### 5. Boat
@@ -127,12 +128,14 @@ These read **`oceanConfig.wave1`–`wave4` only**. They do **not** use `waveVisu
 
 - **WASD** in a `keys` map (`keydown` / `keyup`).
 - **Pointer lock** on canvas click; `mousemove` updates **`camOrbit.yaw`** / **`pitch`** when locked.
+- **Scroll wheel** on the canvas (non-passive): stepped zoom on **`camOrbit.distance`** using **`config.camera`** (`distanceStep`, min/max); distance is clamped each frame so live Tweakpane edits apply.
 - Hint text in `#hint` switches between Spanish strings for locked vs unlocked.
 
 ### 7. Orbit camera
 
 ```js
-camOrbit = { yaw, pitch, distance: 12, sensitivity: 0.0022, pitchMin, pitchMax }
+camOrbit = { yaw, pitch, distance, sensitivity: 0.0022, pitchMin, pitchMax }
+// distance starts as clamp(config.camera.distanceInitial, min, max)
 ```
 
 - **`yaw`** is **world-absolute** (not parented to boat yaw) so the camera does not spin when the boat turns.
@@ -150,7 +153,7 @@ Final draw: **`renderPipeline.render()`** (not `renderer.render(scene, camera)` 
 ### 9. Animation loop
 
 1. **`timer.update()`** — `THREE.Timer` for stable `dt` / elapsed `t`.
-2. Sync **all** TSL **`uniform().value`** fields from **`oceanConfig`** (waves, visual scale, Worley, refraction).
+2. Sync **all** TSL **`uniform().value`** fields from **`config.waves`** and **`config.water`** (layers, visual scale, Worley, refraction).
 3. Underwater mesh motion.
 4. Sail / flag flutter using **`boatObj.*`** mesh refs.
 5. Boat speed, turn, **`waveHeight`** for Y, **`waveNormal`** for pitch/roll lerp.
@@ -162,7 +165,7 @@ Final draw: **`renderPipeline.render()`** (not `renderer.render(scene, camera)` 
 ```js
 if (import.meta.env.DEV) {
   import('./dev-panel.js').then(({ mountDevPanel }) => {
-    mountDevPanel(oceanConfig);
+    mountDevPanel(config);
   });
 }
 ```
@@ -198,8 +201,8 @@ Skills are mirrored under both `.agents/skills/` and `.claude/skills/`. If you u
 
 ## Key constraints and gotchas
 
-1. **Wave formula: JS ↔ TSL** — `waveHeight()` in JS and the TSL `vY` expression (same sines, same `wave1`–`wave4` inputs) must stay identical or the boat will not sit on the waves you see. **`waveVisualScale` only scales the GPU displacement**, not physics.
-2. **`config.js` is the source of truth for tuning** — prefer exporting from Tweakpane into `config.js` rather than scattering magic numbers. Some aesthetic colors still live in `main.js` (fog hex, sky mix, post tint); if you change the palette, consider updating those too.
+1. **Wave formula: JS ↔ TSL** — `waveHeight()` in JS and the TSL `vY` expression (same sines, same `config.waves.wave1`–`wave4` inputs) must stay identical or the boat will not sit on the waves you see. **`config.water.waveVisualScale` only scales the GPU displacement**, not physics.
+2. **`config.js` is the source of truth for tuning** — prefer exporting from Tweakpane into `config.js` (default export **`config`**) rather than scattering magic numbers. Scene fog uses **`config.water.colorDeep`** at init; some aesthetic colors still live in `main.js` (sky horizon mix, post tint); if you change the palette, consider updating those too.
 3. **No duplicate GLSL ocean shader** — everything water-related is TSL in `main.js`; there is no `syncUniforms()` name or separate vertex/fragment GLSL strings.
 4. **Camera yaw is world-absolute** — do not derive yaw from `boat.rotation.y` or the camera will corkscrew when turning.
 5. **Pitch sign** — keep `camOrbit.pitch += e.movementY * sensitivity` as-is for natural mouse-look.

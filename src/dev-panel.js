@@ -2,114 +2,118 @@ import { Pane } from 'tweakpane';
 
 function serializeConfig(config) {
   const n = (v, d = 4) => Number(v.toFixed(d));
-  return `// Ocean configuration — single source of truth.
+  const w = config.waves;
+  const water = config.water;
+  const depth = config.depth;
+  const fog = config.fog;
+  const cam = config.camera;
+  return `// Scene / render tuning — single source of truth.
 // Tweak values in the dev panel (npm run dev), then click "Export Config"
 // and paste the result here to make your changes permanent.
 
-const oceanConfig = {
-  // Wave layers used by JS physics for boat bobbing (waveHeight / waveNormal).
-  // These are NOT visual — the water surface is rendered via TSL refraction.
-  wave1: { freq: ${n(config.wave1.freq)}, speed: ${n(config.wave1.speed)}, amp: ${n(config.wave1.amp)} },
-  wave2: { freq: ${n(config.wave2.freq)}, speed: ${n(config.wave2.speed)}, amp: ${n(config.wave2.amp)} },
-  wave3: { freq: ${n(config.wave3.freq)}, speed: ${n(config.wave3.speed)}, amp: ${n(config.wave3.amp)} },
-  wave4: { freq: ${n(config.wave4.freq)}, speed: ${n(config.wave4.speed)}, amp: ${n(config.wave4.amp)} },
+const config = {
+  waves: {
+    wave1: { freq: ${n(w.wave1.freq)}, speed: ${n(w.wave1.speed)}, amp: ${n(w.wave1.amp)} },
+    wave2: { freq: ${n(w.wave2.freq)}, speed: ${n(w.wave2.speed)}, amp: ${n(w.wave2.amp)} },
+    wave3: { freq: ${n(w.wave3.freq)}, speed: ${n(w.wave3.speed)}, amp: ${n(w.wave3.amp)} },
+    wave4: { freq: ${n(w.wave4.freq)}, speed: ${n(w.wave4.speed)}, amp: ${n(w.wave4.amp)} },
+  },
 
-  // Water surface colors (hex)
-  waterColorDeep:  '${config.waterColorDeep}',
-  waterColorLight: '${config.waterColorLight}',
+  water: {
+    colorDeep:  '${water.colorDeep}',
+    colorLight: '${water.colorLight}',
+    waveVisualScale: ${n(water.waveVisualScale)},
+    noiseSpeed: ${n(water.noiseSpeed)},
+    worleyScale0: ${n(water.worleyScale0)},
+    worleyScale1: ${n(water.worleyScale1)},
+    refractionStrength: ${n(water.refractionStrength)},
+  },
 
-  // Visual wave displacement scale (1.0 = same amplitude as boat physics, 0 = flat)
-  waveVisualScale: ${n(config.waveVisualScale)},
+  depth: {
+    near: ${n(depth.near)},
+    far:   ${n(depth.far)},
+  },
 
-  // How fast the worley noise scrolls (controls wave animation speed)
-  noiseSpeed: ${n(config.noiseSpeed)},
+  fog: {
+    near: ${n(fog.near, 1)},
+    far:  ${n(fog.far, 1)},
+  },
 
-  // Worley noise spatial scale (higher = finer cells on the water)
-  worleyScale0: ${n(config.worleyScale0)},
-  worleyScale1: ${n(config.worleyScale1)},
-
-  // Refraction distortion amount (0 = no distortion, 0.15 = strong)
-  refractionStrength: ${n(config.refractionStrength)},
-
-  // Depth range for the depth-blend effect
-  depthNear: ${n(config.depthNear)},
-  depthFar:   ${n(config.depthFar)},
-
-  // Fog
-  fogNear: ${n(config.fogNear, 1)},
-  fogFar:  ${n(config.fogFar, 1)},
-
-  // Orbit camera zoom (scroll wheel)
-  orbitCamera: {
-    distanceMin:  ${n(config.orbitCamera.distanceMin, 1)},
-    distanceMax:  ${n(config.orbitCamera.distanceMax, 1)},
-    distanceStep: ${n(config.orbitCamera.distanceStep, 2)},
+  camera: {
+    distanceInitial: ${n(cam.distanceInitial, 2)},
+    distanceMin:  ${n(cam.distanceMin, 1)},
+    distanceMax:  ${n(cam.distanceMax, 1)},
+    distanceStep: ${n(cam.distanceStep, 2)},
   },
 };
 
-export default oceanConfig;
+export default config;
 `;
 }
 
 export function mountDevPanel(config) {
-  const pane = new Pane({ title: 'Ocean Shader', expanded: false });
+  const pane = new Pane({ title: 'Scene', expanded: false });
 
   // ——— Boat wave physics ———
   const wavesFolder = pane.addFolder({ title: 'Boat Wave Physics', expanded: false });
   [1, 2, 3, 4].forEach((i) => {
     const key = `wave${i}`;
     const wf = wavesFolder.addFolder({ title: `Layer ${i}`, expanded: false });
-    wf.addBinding(config[key], 'freq',  { label: 'freq',  min: 0.0, max: 3.0, step: 0.01 });
-    wf.addBinding(config[key], 'speed', { label: 'speed', min: 0.0, max: 5.0, step: 0.01 });
-    wf.addBinding(config[key], 'amp',   { label: 'amp',   min: 0.0, max: 2.0, step: 0.01 });
+    wf.addBinding(config.waves[key], 'freq',  { label: 'freq',  min: 0.0, max: 3.0, step: 0.01 });
+    wf.addBinding(config.waves[key], 'speed', { label: 'speed', min: 0.0, max: 5.0, step: 0.01 });
+    wf.addBinding(config.waves[key], 'amp',   { label: 'amp',   min: 0.0, max: 2.0, step: 0.01 });
   });
 
   // ——— Water appearance ———
   const waterFolder = pane.addFolder({ title: 'Water Appearance', expanded: true });
-  waterFolder.addBinding(config, 'waterColorDeep',  { label: 'Deep color',  view: 'color' });
-  waterFolder.addBinding(config, 'waterColorLight', { label: 'Light color', view: 'color' });
-  waterFolder.addBinding(config, 'waveVisualScale', {
+  waterFolder.addBinding(config.water, 'colorDeep',  { label: 'Deep color',  view: 'color' });
+  waterFolder.addBinding(config.water, 'colorLight', { label: 'Light color', view: 'color' });
+  waterFolder.addBinding(config.water, 'waveVisualScale', {
     label: 'Wave height',
     min: 0.0, max: 2.0, step: 0.01,
   });
-  waterFolder.addBinding(config, 'noiseSpeed', {
+  waterFolder.addBinding(config.water, 'noiseSpeed', {
     label: 'Noise speed',
     min: 0.0, max: 3.0, step: 0.01,
   });
-  waterFolder.addBinding(config, 'worleyScale0', {
+  waterFolder.addBinding(config.water, 'worleyScale0', {
     label: 'Worley scale 0',
     min: 0.1, max: 16, step: 0.05,
   });
-  waterFolder.addBinding(config, 'worleyScale1', {
+  waterFolder.addBinding(config.water, 'worleyScale1', {
     label: 'Worley scale 1',
     min: 0.1, max: 16, step: 0.05,
   });
-  waterFolder.addBinding(config, 'refractionStrength', {
+  waterFolder.addBinding(config.water, 'refractionStrength', {
     label: 'Refraction',
     min: 0.0, max: 0.3, step: 0.001,
   });
 
   // ——— Depth effect ———
   const depthFolder = pane.addFolder({ title: 'Depth Effect', expanded: false });
-  depthFolder.addBinding(config, 'depthNear', { label: 'near', min: -0.01, max: 0.0, step: 0.0001 });
-  depthFolder.addBinding(config, 'depthFar',  { label: 'far',  min: 0.01,  max: 0.2, step: 0.001  });
+  depthFolder.addBinding(config.depth, 'near', { label: 'near', min: -0.01, max: 0.0, step: 0.0001 });
+  depthFolder.addBinding(config.depth, 'far',  { label: 'far',  min: 0.01,  max: 0.2, step: 0.001  });
 
   // ——— Fog ———
   const fogFolder = pane.addFolder({ title: 'Fog', expanded: false });
-  fogFolder.addBinding(config, 'fogNear', { label: 'near', min: 1,  max: 50,  step: 1 });
-  fogFolder.addBinding(config, 'fogFar',  { label: 'far',  min: 10, max: 200, step: 1 });
+  fogFolder.addBinding(config.fog, 'near', { label: 'near', min: 1,  max: 50,  step: 1 });
+  fogFolder.addBinding(config.fog, 'far',  { label: 'far',  min: 10, max: 200, step: 1 });
 
   // ——— Camera / Orbit ———
   const cameraFolder = pane.addFolder({ title: 'Camera / Orbit', expanded: false });
-  cameraFolder.addBinding(config.orbitCamera, 'distanceMin', {
+  cameraFolder.addBinding(config.camera, 'distanceInitial', {
+    label: 'Initial zoom',
+    min: 1, max: 120, step: 0.5,
+  });
+  cameraFolder.addBinding(config.camera, 'distanceMin', {
     label: 'Zoom min',
     min: 1, max: 80, step: 0.5,
   });
-  cameraFolder.addBinding(config.orbitCamera, 'distanceMax', {
+  cameraFolder.addBinding(config.camera, 'distanceMax', {
     label: 'Zoom max',
     min: 5, max: 120, step: 0.5,
   });
-  cameraFolder.addBinding(config.orbitCamera, 'distanceStep', {
+  cameraFolder.addBinding(config.camera, 'distanceStep', {
     label: 'Step size',
     min: 0.25, max: 5, step: 0.25,
   });
@@ -123,7 +127,7 @@ export function mountDevPanel(config) {
       exportBtn.title = 'Copied!';
       setTimeout(() => { exportBtn.title = 'Export Config'; }, 2000);
     }).catch(() => {
-      console.log('%c[Ocean Config — paste into src/config.js]', 'font-weight:bold');
+      console.log('%c[config.js — paste into src/config.js]', 'font-weight:bold');
       console.log(output);
       exportBtn.title = 'See console';
       setTimeout(() => { exportBtn.title = 'Export Config'; }, 2500);

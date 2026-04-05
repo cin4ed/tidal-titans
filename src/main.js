@@ -20,14 +20,14 @@ import {
 } from 'three/tsl';
 import { gaussianBlur } from 'three/addons/tsl/display/GaussianBlurNode.js';
 
-import oceanConfig from './config.js';
+import config from './config.js';
 import { createPirateShip } from './models/pirateShip.js';
 
 // ——— Wave height (CPU side, for boat physics only) ———
 // The visual water is rendered via TSL refraction; this formula only drives
 // the boat bobbing and tilt — so the GLSL/TSL sync constraint is gone.
 function waveHeight(x, z, t) {
-  const { wave1, wave2, wave3, wave4 } = oceanConfig;
+  const { wave1, wave2, wave3, wave4 } = config.waves;
   let h = 0;
   h += Math.sin(x * wave1.freq + t * wave1.speed) * wave1.amp;
   h += Math.sin(z * wave2.freq + t * wave2.speed) * wave2.amp;
@@ -49,11 +49,11 @@ function waveNormal(x, z, t, eps = 0.15) {
 async function init() {
   // ——— Scene ———
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(0x0487e2, oceanConfig.fogNear, oceanConfig.fogFar);
+  scene.fog = new THREE.Fog(config.water.colorDeep, config.fog.near, config.fog.far);
 
   // TSL gradient sky — replaces the canvas texture sky
   scene.backgroundNode = normalWorld.y.mix(
-    color(oceanConfig.waterColorDeep),
+    color(config.water.colorDeep),
     color(0x0066ff)
   );
 
@@ -121,27 +121,27 @@ async function init() {
   scene.add(underwaterObjects);
 
   // ——— TSL Water Material ———
-  // TSL uniforms — updated every frame from oceanConfig so dev-panel sliders work live.
+  // TSL uniforms — updated every frame from config so dev-panel sliders work live.
 
   // Wave displacement uniforms (shared formula with JS waveHeight)
-  const uW1Freq  = uniform(oceanConfig.wave1.freq);
-  const uW1Speed = uniform(oceanConfig.wave1.speed);
-  const uW1Amp   = uniform(oceanConfig.wave1.amp);
-  const uW2Freq  = uniform(oceanConfig.wave2.freq);
-  const uW2Speed = uniform(oceanConfig.wave2.speed);
-  const uW2Amp   = uniform(oceanConfig.wave2.amp);
-  const uW3Freq  = uniform(oceanConfig.wave3.freq);
-  const uW3Speed = uniform(oceanConfig.wave3.speed);
-  const uW3Amp   = uniform(oceanConfig.wave3.amp);
-  const uW4Freq  = uniform(oceanConfig.wave4.freq);
-  const uW4Speed = uniform(oceanConfig.wave4.speed);
-  const uW4Amp   = uniform(oceanConfig.wave4.amp);
-  const uWaveVisualScale = uniform(oceanConfig.waveVisualScale);
+  const uW1Freq  = uniform(config.waves.wave1.freq);
+  const uW1Speed = uniform(config.waves.wave1.speed);
+  const uW1Amp   = uniform(config.waves.wave1.amp);
+  const uW2Freq  = uniform(config.waves.wave2.freq);
+  const uW2Speed = uniform(config.waves.wave2.speed);
+  const uW2Amp   = uniform(config.waves.wave2.amp);
+  const uW3Freq  = uniform(config.waves.wave3.freq);
+  const uW3Speed = uniform(config.waves.wave3.speed);
+  const uW3Amp   = uniform(config.waves.wave3.amp);
+  const uW4Freq  = uniform(config.waves.wave4.freq);
+  const uW4Speed = uniform(config.waves.wave4.speed);
+  const uW4Amp   = uniform(config.waves.wave4.amp);
+  const uWaveVisualScale = uniform(config.water.waveVisualScale);
 
   // Worley / refraction uniforms
-  const uNoiseSpeed = uniform(oceanConfig.noiseSpeed);
-  const uWorleyScale0 = uniform(oceanConfig.worleyScale0);
-  const uWorleyScale1 = uniform(oceanConfig.worleyScale1);
+  const uNoiseSpeed = uniform(config.water.noiseSpeed);
+  const uWorleyScale0 = uniform(config.water.worleyScale0);
+  const uWorleyScale1 = uniform(config.water.worleyScale1);
 
   // ——— TSL vertex wave displacement ———
   // Mirrors JS waveHeight() exactly; positionLocal is object-space (plane lies in XZ).
@@ -164,8 +164,8 @@ async function init() {
   const waterLayer1 = mx_worley_noise_float(floorUV.mul(uWorleyScale1).add(t));
   const waterIntensity = waterLayer0.mul(waterLayer1);
 
-  const waterColorDeep  = color(oceanConfig.waterColorDeep);
-  const waterColorLight = color(oceanConfig.waterColorLight);
+  const waterColorDeep  = color(config.water.colorDeep);
+  const waterColorLight = color(config.water.colorLight);
   const waterColor = waterIntensity.mul(1.4).mix(waterColorDeep, waterColorLight);
 
   // linearDepth() = linear depth of this mesh's fragment
@@ -173,11 +173,11 @@ async function init() {
 
   // Depth of what's behind the water: viewportLinearDepth - depth
   const depthWater = viewportLinearDepth.sub(depth);
-  const depthEffect = depthWater.remapClamp(oceanConfig.depthNear, oceanConfig.depthFar);
+  const depthEffect = depthWater.remapClamp(config.depth.near, config.depth.far);
 
   // Refraction: offset screen UV by the water noise, then depth-test so
   // objects above the water surface are never refracted
-  const uRefractionStrength = uniform(oceanConfig.refractionStrength);
+  const uRefractionStrength = uniform(config.water.refractionStrength);
   const refractionUV = screenUV.add(
     vec2(0, waterIntensity.mul(uRefractionStrength))
   );
@@ -230,10 +230,11 @@ async function init() {
   const turnSpeed = 2.4;
 
   // ——— Camera orbit state ———
+  const oc = config.camera;
   const camOrbit = {
     yaw: Math.PI,
     pitch: 0.42,
-    distance: 12,
+    distance: THREE.MathUtils.clamp(oc.distanceInitial ?? 12, oc.distanceMin, oc.distanceMax),
     sensitivity: 0.0022,
     pitchMin: 0.05,
     pitchMax: Math.PI / 2 - 0.05,
@@ -266,7 +267,7 @@ async function init() {
   // ——— Scroll-wheel zoom ———
   renderer.domElement.addEventListener('wheel', (e) => {
     e.preventDefault();
-    const { distanceMin, distanceMax, distanceStep } = oceanConfig.orbitCamera;
+    const { distanceMin, distanceMax, distanceStep } = config.camera;
     camOrbit.distance += Math.sign(e.deltaY) * distanceStep;
     camOrbit.distance = THREE.MathUtils.clamp(camOrbit.distance, distanceMin, distanceMax);
   }, { passive: false });
@@ -317,17 +318,18 @@ async function init() {
     const dt = Math.min(timer.getDelta(), 0.1);
     const t = timer.getElapsed();
 
-    // Sync TSL uniforms from oceanConfig (live dev-panel + exported defaults)
-    const c = oceanConfig;
-    uW1Freq.value  = c.wave1.freq;  uW1Speed.value = c.wave1.speed; uW1Amp.value = c.wave1.amp;
-    uW2Freq.value  = c.wave2.freq;  uW2Speed.value = c.wave2.speed; uW2Amp.value = c.wave2.amp;
-    uW3Freq.value  = c.wave3.freq;  uW3Speed.value = c.wave3.speed; uW3Amp.value = c.wave3.amp;
-    uW4Freq.value  = c.wave4.freq;  uW4Speed.value = c.wave4.speed; uW4Amp.value = c.wave4.amp;
-    uWaveVisualScale.value = c.waveVisualScale;
-    uNoiseSpeed.value = c.noiseSpeed;
-    uWorleyScale0.value = c.worleyScale0;
-    uWorleyScale1.value = c.worleyScale1;
-    uRefractionStrength.value = c.refractionStrength;
+    // Sync TSL uniforms from config (live dev-panel + exported defaults)
+    const w = config.waves;
+    const water = config.water;
+    uW1Freq.value  = w.wave1.freq;  uW1Speed.value = w.wave1.speed; uW1Amp.value = w.wave1.amp;
+    uW2Freq.value  = w.wave2.freq;  uW2Speed.value = w.wave2.speed; uW2Amp.value = w.wave2.amp;
+    uW3Freq.value  = w.wave3.freq;  uW3Speed.value = w.wave3.speed; uW3Amp.value = w.wave3.amp;
+    uW4Freq.value  = w.wave4.freq;  uW4Speed.value = w.wave4.speed; uW4Amp.value = w.wave4.amp;
+    uWaveVisualScale.value = water.waveVisualScale;
+    uNoiseSpeed.value = water.noiseSpeed;
+    uWorleyScale0.value = water.worleyScale0;
+    uWorleyScale1.value = water.worleyScale1;
+    uRefractionStrength.value = water.refractionStrength;
 
     // Animate underwater objects
     for (const obj of underwaterObjects.children) {
@@ -377,8 +379,8 @@ async function init() {
     // Orbit camera — clamp distance each frame so live Tweakpane changes take effect immediately
     camOrbit.distance = THREE.MathUtils.clamp(
       camOrbit.distance,
-      oceanConfig.orbitCamera.distanceMin,
-      oceanConfig.orbitCamera.distanceMax,
+      config.camera.distanceMin,
+      config.camera.distanceMax,
     );
     const sinYaw   = Math.sin(camOrbit.yaw);
     const cosYaw   = Math.cos(camOrbit.yaw);
@@ -403,7 +405,7 @@ async function init() {
   // ——— Dev panel (development only) ———
   if (import.meta.env.DEV) {
     import('./dev-panel.js').then(({ mountDevPanel }) => {
-      mountDevPanel(oceanConfig);
+      mountDevPanel(config);
     });
   }
 }
