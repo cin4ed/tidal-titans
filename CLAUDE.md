@@ -9,7 +9,7 @@ This file tells Claude how this repository is structured, what it contains, and 
 A browser demo of a **Wind Waker–style stylized ocean** with a navigable **procedural pirate ship**.
 
 - **Language/UI**: English copy in the HTML; code comments in English.
-- **Entry point**: `src/main.js` — async `init()` (~400 lines) that sets up WebGPU, scene, water (TSL), boat, input, post-processing, and the animation loop.
+- **Entry point**: `src/main.js` — async `init()` (~685 lines) that sets up WebGPU, scene, water (TSL), boat, input, port broadside cannons (charge + trajectory preview), post-processing, and the animation loop.
 - **Stack**: [Vite](https://vitejs.dev/) `^6.2.0` + [Three.js](https://threejs.org/) `^0.183.0` (ES modules).
 - **Rendering**: **WebGPU** via `three/webgpu` — not `WebGLRenderer`. Node materials and **TSL** (`three/tsl`) drive the water surface, sky background, and fullscreen post output.
 - **Dev tooling**: [Tweakpane](https://tweakpane.github.io/docs/) v4 (devDependency) — live ocean tuning; loaded only when `import.meta.env.DEV` is true.
@@ -44,8 +44,8 @@ tidal-titans-2/
 ├── .gitignore          # node_modules, dist, .DS_Store
 │
 ├── src/
-│   ├── main.js         # Scene, WebGPU renderer, TSL water, post pipeline, boat motion, camera, input
-│   ├── config.js       # config — nested scene tuning (waves, water, sky, depth, fog, camera)
+│   ├── main.js         # Scene, WebGPU renderer, TSL water, post pipeline, boat, cannons, camera, input
+│   ├── config.js       # config — scene + combat tuning (waves, water, sky, depth, fog, camera, combat)
 │   ├── dev-panel.js    # Tweakpane UI — dynamic import in dev only
 │   └── models/
 │       └── pirateShip.js   # createPirateShip() — procedural ship group + sail/flag refs for animation
@@ -86,6 +86,7 @@ Default export: `**config**`. The dev panel edits this object in memory; **Expor
 | Depth blend           | `config.depth.near`, `config.depth.far`                                             | Remap range for water vs backdrop depth (tuned for linear depth units).                                                                                                                                                                                                                                                                                                                 |
 | Fog                   | `config.fog.enabled`, `config.fog.near`, `config.fog.far`                           | When enabled, `THREE.Fog` on the scene (boat, underwater props, sun, etc.); near/far/color synced from config each frame.                                                                                                                                                                                                                                                               |
 | Orbit zoom            | `config.camera` — `distanceInitial`, `distanceMin`, `distanceMax`, `distanceStep`   | Scroll-wheel stepped dolly on `camOrbit.distance`; initial value clamped to min/max.                                                                                                                                                                                                                                                                                                    |
+| Combat / cannons      | `config.combat`                                                                     | Port broadside tuning read **live** from `config` in `main.js`: `muzzleSpeed`, `gravity`, `volleyStagger`, `cooldown`, `powerMin` / `powerMax`, `maxChargeTime`, `rangeAtMinPower` / `rangeAtMaxPower`, `trajectoryPreviewMuzzleIndex`, `trajectorySampleDt`, `trajectoryMaxSteps`. Dev panel: **Combat / Cannons** folder. **Export Config** includes the full `combat` block.         |
 
 
 There is **no** separate GLSL file: water appearance is entirely **TSL node graphs** in `main.js`.
@@ -94,7 +95,7 @@ There is **no** separate GLSL file: water appearance is entirely **TSL node grap
 
 ## src/main.js architecture
 
-`main.js` imports `three/webgpu` and `three/tsl`. Initialization is `**async`** because `**await renderer.init()**` is required for WebGPU.
+`main.js` imports `three/webgpu` and `three/tsl`. Initialization is `**async`** because `**await renderer.init()`** is required for WebGPU.
 
 ### 1. Wave math (CPU — boat physics)
 
@@ -105,7 +106,7 @@ These read `**config.waves.wave1`–`wave4**`, `**config.waves.spatialScale**`, 
 
 ### 2. Scene & renderer
 
-- `**THREE.Scene`** + optional `**THREE.Fog**` when `config.fog.enabled`: color from `config.water.colorDeep`, distances from `config.fog.near` / `far` (all synced each frame when on).
+- `**THREE.Scene`** + optional `**THREE.Fog`** when `config.fog.enabled`: color from `config.water.colorDeep`, distances from `config.fog.near` / `far` (all synced each frame when on).
 - `**scene.backgroundNode**`: TSL mix on `normalWorld.y` between `**config.sky.horizon**` and `**config.sky.zenith**` (uniform-backed; live with dev panel) — **not** tied to water colors.
 - `**THREE.PerspectiveCamera`** (FOV 55, **near 0.25**, far 500).
 - `**THREE.WebGPURenderer`**: antialias, sRGB output, pixel ratio capped at 2.
@@ -119,24 +120,34 @@ These read `**config.waves.wave1`–`wave4**`, `**config.waves.spatialScale**`, 
 ### 4. TSL water (`MeshBasicNodeMaterial`)
 
 - **Geometry**: `PlaneGeometry(220, 220, 200, 200)` rotated −90° on X (lies in XZ).
-- **Vertex**: `positionLocal` displaced in Y by a TSL expression that **mirrors** `waveHeight`: local **X/Z** are divided by `**uniform(config.waves.spatialScale)`**, each sine amplitude is multiplied by spatial scale and `**uniform(config.waves.ampScale)**`, then the result is multiplied by `**uniform(config.water.waveVisualScale)**` for the final mesh offset (initial uniform values from `config` at material setup).
+- **Vertex**: `positionLocal` displaced in Y by a TSL expression that **mirrors** `waveHeight`: local **X/Z** are divided by `**uniform(config.waves.spatialScale)`**, each sine amplitude is multiplied by spatial scale and `**uniform(config.waves.ampScale)`**, then the result is multiplied by `**uniform(config.water.waveVisualScale)**` for the final mesh offset (initial uniform values from `config` at material setup).
 - **Uniforms**: `uniform(...)` nodes for each wave component, Worley/refraction, **water deep/light colors**, and **sky horizon/zenith**; **each frame** the animation loop assigns `.value` / `THREE.Color.set()` from `config` (so Tweakpane and exported config both apply).
 - **Fragment**: Worley-based `waterColor`; **backdrop** samples the scene via `viewportSharedTexture` with refraction UVs and depth tests so geometry above the water is not incorrectly refracted. Transparency enabled for the water mesh.
 
 ### 5. Boat
 
-- `**createPirateShip()`** from `**./models/pirateShip.js**` returns `{ group, mainSail, topSail, foreSail, flagMain, mainSailBaseZ, topSailBaseZ, foreSailBaseZ }`.
-- The `**group**` uses `**rotation.y = Math.PI**` so local +Z aligns with the movement/heading convention used in `main.js`.
-- Procedural **MeshStandardMaterial** (flat shaded) hull, masts, rigging, sails, cannons, etc.; **jolly roger** plane uses a dark material (not red).
+- `**createPirateShip()`** from `**./models/pirateShip.js`** returns `{ group, mainSail, topSail, foreSail, flagMain, portCannonMuzzleLocal, mainSailBaseZ, topSailBaseZ, foreSailBaseZ }`.
+- `**portCannonMuzzleLocal**`: three `THREE.Vector3` offsets (ship-local) for **port-side** muzzle positions; used to spawn cannonballs and the trajectory preview.
+- The `**group`** uses `**rotation.y = Math.PI**` so local +Z aligns with the movement/heading convention used in `main.js`.
+- Procedural **MeshStandardMaterial** (flat shaded) hull, masts, rigging, sails, cannons (port and starboard meshes), etc.; **jolly roger** plane uses a dark material (not red). **Gameplay** fires **port broadside only** (see below).
 
 ### 6. Input
 
 - **WASD** in a `keys` map (`keydown` / `keyup`).
-- **Pointer lock** on canvas click; `mousemove` updates `**camOrbit.yaw`** / `**pitch**` when locked.
-- **Scroll wheel** on the canvas (non-passive): stepped zoom on `**camOrbit.distance`** using `**config.camera**` (`distanceStep`, min/max); distance is clamped each frame so live Tweakpane edits apply.
+- **Pointer lock** on canvas click; `mousemove` updates `**camOrbit.yaw`** / `**pitch`** when locked.
+- **Scroll wheel** on the canvas (non-passive): stepped zoom on `**camOrbit.distance`** using `**config.camera`** (`distanceStep`, min/max); distance is clamped each frame so live Tweakpane edits apply.
 - `**#hint**` in `**index.html**`: fixed bottom-left panel with illustrated control rows (inline SVGs); `**main.js**` toggles `**is-locked**` on pointer lock to swap the primary row (click to lock pointer vs ESC to release). English copy.
 
-### 7. Orbit camera
+### 7. Port broadside cannons (combat)
+
+- **When**: Only while **pointer is locked** on the canvas (`document.pointerLockElement === renderer.domElement`).
+- **Charge / fire**: `**mousedown`** (button 0) starts charging if off cooldown; `**document.mouseup**` (button 0) ends charge and queues a **three-gun volley** with stagger from `**config.combat.volleyStagger`**. Hold duration maps to **power** between `**config.combat.powerMin`** and `**powerMax**` over `**maxChargeTime**` (wall-clock). **Cooldown** applied on release via `**config.combat.cooldown`**.
+- **Cancel charge**: Losing pointer lock (`**pointerlockchange`**, e.g. ESC) clears charging **without** firing.
+- **Ballistics**: World-space spheres parented to `**scene`**; initial velocity = horizontal **port** direction (`**-rightVec`** in XZ, normalized) × `**muzzleSpeed * powerScale**` + `**boatForward * speed**`. Integration matches preview: `**velocity.y -= config.combat.gravity * dt**`, position += velocity × dt. Per-shot **max horizontal range** and **max lifetime** scale with power (range endpoints from `**rangeAtMinPower`** / `**rangeAtMaxPower**`).
+- **Trajectory preview**: While charging (and off cooldown), a `**THREE.Line`** shows a sampled arc from the **preview muzzle** (`**trajectoryPreviewMuzzleIndex`**, clamped 0–2). Integration uses `**trajectorySampleDt`** and up to `**trajectoryMaxSteps**` (clamped to an internal buffer cap). Stops when below `**waveHeight(x, z, t)**`, beyond preview range, or step cap.
+- **Starboard**: Not wired for firing yet; only a sign flip away from port math.
+
+### 8. Orbit camera
 
 ```js
 camOrbit = { yaw, pitch, distance, sensitivity: 0.0022, pitchMin, pitchMax }
@@ -145,9 +156,9 @@ camOrbit = { yaw, pitch, distance, sensitivity: 0.0022, pitchMin, pitchMax }
 
 - `**yaw**` is **world-absolute** (not parented to boat yaw) so the camera does not spin when the boat turns.
 - `**pitch += movementY * sensitivity`** (positive movementY increases pitch clamp) for natural look.
-- Camera **lerps** toward a spherical offset from `**boat.position + (0, 1.5, 0)`** and `**lookAt**` that target.
+- Camera **lerps** toward a spherical offset from `**boat.position + (0, 1.5, 0)`** and `**lookAt`** that target.
 
-### 8. Post-processing (`THREE.RenderPipeline`)
+### 9. Post-processing (`THREE.RenderPipeline`)
 
 - `**pass(scene, camera)**` → color + linear depth.
 - **Gaussian blur** on color; blur strength selected by a **water mask** (roughly: above vs below water line in screen space).
@@ -155,25 +166,30 @@ camOrbit = { yaw, pitch, distance, sensitivity: 0.0022, pitchMin, pitchMax }
 
 Final draw: `**renderPipeline.render()`** (not `renderer.render(scene, camera)` alone).
 
-### 9. Animation loop
+### 10. Animation loop
 
-1. `**timer.update()**` — `THREE.Timer` for stable `dt` / elapsed `t`.
-2. Sync **all** TSL `**uniform().value`** / color uniforms from `**config.waves**`, `**config.water**`, and `**config.sky**` (wave layers, `**spatialScale**`, `**ampScale**`, visual scale, Worley, refraction, water/sky colors); sync `**scene.fog**` from `**config.fog**` / `**config.water.colorDeep**` when fog is enabled.
+1. `**timer.update()`** — `THREE.Timer` for stable `dt` / elapsed `t`.
+2. Sync **all** TSL `**uniform().value`** / color uniforms from `**config.waves`**, `**config.water**`, and `**config.sky**` (wave layers, `**spatialScale**`, `**ampScale**`, visual scale, Worley, refraction, water/sky colors); sync `**scene.fog**` from `**config.fog**` / `**config.water.colorDeep**` when fog is enabled.
 3. Underwater mesh motion.
 4. Sail / flag flutter using `**boatObj.***` mesh refs.
-5. Boat speed, turn, `**waveHeight**` for Y, `**waveNormal**` for pitch/roll lerp.
-6. Camera lerp + `**lookAt**`.
-7. `**renderPipeline.render()**`.
+5. Boat speed, turn, `**waveHeight**` for Y, `**waveNormal**` for pitch/roll lerp; `**rightVec**` for cannon aim.
+6. Cannon **shot queue** (staggered spawns) and **projectile** integration (`**config.combat.gravity`**); **trajectory line** update while charging.
+7. Camera lerp + `**lookAt`**.
+8. `**renderPipeline.render()**`.
 
-### 10. Dev panel (conditional)
+### 11. Dev panel (conditional)
 
 ```js
 if (import.meta.env.DEV) {
   import('./dev-panel.js').then(({ mountDevPanel }) => {
-    mountDevPanel(config);
+    mountDevPanel(config, {
+      onCameraInitialZoomChange: (d) => { /* sync camOrbit.distance */ },
+    });
   });
 }
 ```
+
+- Folders include **Boat Wave Physics**, **Water Appearance**, **Sky**, **Depth Effect**, **Fog**, **Camera / Orbit**, and **Combat / Cannons**. **Export Config** serializes the entire default export including `**combat`**.
 
 Production builds omit this import via tree-shaking.
 
@@ -181,7 +197,7 @@ Production builds omit this import via tree-shaking.
 
 ## src/models/pirateShip.js
 
-`**export function createPirateShip()**` builds the full `**THREE.Group**`. Keep bow orientation along **local +Z** (cone + `rotation.x = π/2`) so the hull matches navigation and rigging. Returns animatable sail/flag meshes for the main loop.
+`**export function createPirateShip()**` builds the full `**THREE.Group**`. Keep bow orientation along **local +Z** (cone + `rotation.x = π/2`) so the hull matches navigation and rigging. Returns animatable sail/flag meshes, `**portCannonMuzzleLocal`**, and the group for the main loop.
 
 ---
 
@@ -206,14 +222,15 @@ Skills are mirrored under both `.agents/skills/` and `.claude/skills/`. If you u
 
 ## Key constraints and gotchas
 
-1. **Wave formula: JS ↔ TSL** — `waveHeight()` in JS and the TSL `vY` expression (same sines, same `config.waves.wave1`–`wave4` inputs) must stay identical or the boat will not sit on the waves you see. `**config.waves.spatialScale`** and `**config.waves.ampScale**` must match in both. `**config.water.waveVisualScale` only scales the final GPU vertex offset**, not physics.
-2. `**config.js` is the source of truth for tuning** — prefer exporting from Tweakpane into `config.js` (default export `**config`**) rather than scattering magic numbers. **Sky** is `**config.sky.horizon` / `zenith`** (not water deep/light). Scene fog color tracks `**config.water.colorDeep**`. Some aesthetic colors still live in `main.js` (e.g. post vignette tint `0x74ccf4`, lights); align with palette when retuning.
+1. **Wave formula: JS ↔ TSL** — `waveHeight()` in JS and the TSL `vY` expression (same sines, same `config.waves.wave1`–`wave4` inputs) must stay identical or the boat will not sit on the waves you see. `**config.waves.spatialScale`** and `**config.waves.ampScale`** must match in both. `**config.water.waveVisualScale` only scales the final GPU vertex offset**, not physics.
+2. `**config.js` is the source of truth for tuning** — prefer exporting from Tweakpane into `config.js` (default export `**config`**) rather than scattering magic numbers. Sky is `**config.sky.horizon` / `zenith`** (not water deep/light). Scene fog color tracks `**config.water.colorDeep**`. **Combat** lives in `**config.combat`** and is read live in the loop (no duplicate constants for ballistics). Some aesthetic colors still live in `main.js` (e.g. post vignette tint `0x74ccf4`, lights, trajectory line color); align with palette when retuning.
 3. **No duplicate GLSL ocean shader** — everything water-related is TSL in `main.js`; there is no `syncUniforms()` name or separate vertex/fragment GLSL strings.
 4. **Camera yaw is world-absolute** — do not derive yaw from `boat.rotation.y` or the camera will corkscrew when turning.
 5. **Pitch sign** — keep `camOrbit.pitch += e.movementY * sensitivity` as-is for natural mouse-look.
 6. **Scene fog vs water** — opaque/semi-opaque objects use `scene.fog`; the water material uses its own depth/backdrop logic. Changing fog distances in config affects the boat and props, not necessarily the perceived water horizon (background is `backgroundNode`).
 7. **Reuse vectors in the loop** — `boatForward`, `camTarget`, `camDesired`, `rightVec`, `worldUp` are allocated once outside `setAnimationLoop`.
 8. **Tweakpane is dev-only** — do not import Tweakpane from `main.js` or `config.js` in a way that ships to production.
-9. `**dist/` and `public/`** — `.gitignore` ignores `dist/` but your clone may still track builds; avoid deleting tracked artifacts without checking `git status`. `**public/**` may be missing; Vite still builds; add the folder when you need static URLs.
+9. `**dist/` and `public/`** — `.gitignore` ignores `dist/` but your clone may still track builds; avoid deleting tracked artifacts without checking `git status`. `**public/`** may be missing; Vite still builds; add the folder when you need static URLs.
 10. **WebGPU init** — any new setup that runs before the first frame must respect `**await renderer.init()`** and keep the async `init().catch(...)` entry pattern.
+11. **Cannon trajectory buffer** — `**trajectoryMaxSteps`** in config is clamped to a fixed internal maximum so the preview `Float32Array` is not resized at runtime; raise the cap in `main.js` if you need longer preview polylines.
 
