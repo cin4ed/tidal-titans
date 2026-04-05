@@ -18,6 +18,9 @@ const oceanConfig = {
   waterColorDeep:  '${config.waterColorDeep}',
   waterColorLight: '${config.waterColorLight}',
 
+  // Visual wave displacement scale (1.0 = same amplitude as boat physics, 0 = flat)
+  waveVisualScale: ${n(config.waveVisualScale)},
+
   // How fast the worley noise scrolls (controls wave animation speed)
   noiseSpeed: ${n(config.noiseSpeed)},
 
@@ -58,6 +61,10 @@ export function mountDevPanel(config) {
   const waterFolder = pane.addFolder({ title: 'Water Appearance', expanded: true });
   waterFolder.addBinding(config, 'waterColorDeep',  { label: 'Deep color',  view: 'color' });
   waterFolder.addBinding(config, 'waterColorLight', { label: 'Light color', view: 'color' });
+  waterFolder.addBinding(config, 'waveVisualScale', {
+    label: 'Wave height',
+    min: 0.0, max: 2.0, step: 0.01,
+  });
   waterFolder.addBinding(config, 'noiseSpeed', {
     label: 'Noise speed',
     min: 0.0, max: 3.0, step: 0.01,

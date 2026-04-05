@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 import {
   color,
   vec2,
+  vec3,
   pass,
   linearDepth,
   normalWorld,
@@ -11,7 +12,9 @@ import {
   viewportDepthTexture,
   viewportSharedTexture,
   mx_worley_noise_float,
+  positionLocal,
   positionWorld,
+  sin,
   time,
   uniform,
 } from 'three/tsl';
@@ -117,12 +120,42 @@ async function init() {
   scene.add(underwaterObjects);
 
   // ——— TSL Water Material ———
-  // Animating worley noise drives both the surface color and refraction UV offset.
-  // Uniforms so dev-panel tweaks to worley scales apply every frame.
+  // TSL uniforms — updated every frame from oceanConfig so dev-panel sliders work live.
+
+  // Wave displacement uniforms (shared formula with JS waveHeight)
+  const uW1Freq  = uniform(oceanConfig.wave1.freq);
+  const uW1Speed = uniform(oceanConfig.wave1.speed);
+  const uW1Amp   = uniform(oceanConfig.wave1.amp);
+  const uW2Freq  = uniform(oceanConfig.wave2.freq);
+  const uW2Speed = uniform(oceanConfig.wave2.speed);
+  const uW2Amp   = uniform(oceanConfig.wave2.amp);
+  const uW3Freq  = uniform(oceanConfig.wave3.freq);
+  const uW3Speed = uniform(oceanConfig.wave3.speed);
+  const uW3Amp   = uniform(oceanConfig.wave3.amp);
+  const uW4Freq  = uniform(oceanConfig.wave4.freq);
+  const uW4Speed = uniform(oceanConfig.wave4.speed);
+  const uW4Amp   = uniform(oceanConfig.wave4.amp);
+  const uWaveVisualScale = uniform(oceanConfig.waveVisualScale);
+
+  // Worley / refraction uniforms
   const uNoiseSpeed = uniform(oceanConfig.noiseSpeed);
   const uWorleyScale0 = uniform(oceanConfig.worleyScale0);
   const uWorleyScale1 = uniform(oceanConfig.worleyScale1);
 
+  // ——— TSL vertex wave displacement ———
+  // Mirrors JS waveHeight() exactly; positionLocal is object-space (plane lies in XZ).
+  const px = positionLocal.x;
+  const pz = positionLocal.z;
+
+  const vY =
+    sin(px.mul(uW1Freq).add(time.mul(uW1Speed))).mul(uW1Amp)
+    .add(sin(pz.mul(uW2Freq).add(time.mul(uW2Speed))).mul(uW2Amp))
+    .add(sin(px.add(pz).mul(uW3Freq).add(time.mul(uW3Speed))).mul(uW3Amp))
+    .add(sin(px.mul(uW4Freq).add(pz.mul(0.8)).add(time.mul(uW4Speed))).mul(uW4Amp));
+
+  const displacedPosition = positionLocal.add(vec3(0, vY.mul(uWaveVisualScale), 0));
+
+  // Worley noise for surface color + refraction (samples world position after displacement)
   const t = time.mul(uNoiseSpeed);
   const floorUV = positionWorld.xzy;
 
@@ -156,6 +189,7 @@ async function init() {
   const viewportTex = viewportSharedTexture(finalUV);
 
   const waterMaterial = new THREE.MeshBasicNodeMaterial();
+  waterMaterial.positionNode = displacedPosition;
   waterMaterial.colorNode = waterColor;
   waterMaterial.backdropNode = depthEffect.mix(
     viewportSharedTexture(),
@@ -164,10 +198,10 @@ async function init() {
   waterMaterial.backdropAlphaNode = depthRefraction.oneMinus();
   waterMaterial.transparent = true;
 
-  const water = new THREE.Mesh(
-    new THREE.BoxGeometry(220, 0.001, 220),
-    waterMaterial
-  );
+  // Subdivided plane gives enough vertices to show smooth rolling waves.
+  const waterGeo = new THREE.PlaneGeometry(220, 220, 200, 200);
+  waterGeo.rotateX(-Math.PI / 2);
+  const water = new THREE.Mesh(waterGeo, waterMaterial);
   water.position.set(0, 0, 0);
   scene.add(water);
 
@@ -344,6 +378,11 @@ async function init() {
 
     // Sync TSL uniforms from oceanConfig (live dev-panel + exported defaults)
     const c = oceanConfig;
+    uW1Freq.value  = c.wave1.freq;  uW1Speed.value = c.wave1.speed; uW1Amp.value = c.wave1.amp;
+    uW2Freq.value  = c.wave2.freq;  uW2Speed.value = c.wave2.speed; uW2Amp.value = c.wave2.amp;
+    uW3Freq.value  = c.wave3.freq;  uW3Speed.value = c.wave3.speed; uW3Amp.value = c.wave3.amp;
+    uW4Freq.value  = c.wave4.freq;  uW4Speed.value = c.wave4.speed; uW4Amp.value = c.wave4.amp;
+    uWaveVisualScale.value = c.waveVisualScale;
     uNoiseSpeed.value = c.noiseSpeed;
     uWorleyScale0.value = c.worleyScale0;
     uWorleyScale1.value = c.worleyScale1;
