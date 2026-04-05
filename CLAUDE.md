@@ -8,7 +8,7 @@ This file tells Claude how this repository is structured, what it contains, and 
 
 A browser demo of a **Wind Waker–style stylized ocean** with a navigable **procedural pirate ship**.
 
-- **Language/UI**: Spanish copy in the HTML; code comments in English.
+- **Language/UI**: English copy in the HTML; code comments in English.
 - **Entry point**: `src/main.js` — async `init()` (~400 lines) that sets up WebGPU, scene, water (TSL), boat, input, post-processing, and the animation loop.
 - **Stack**: [Vite](https://vitejs.dev/) `^6.2.0` + [Three.js](https://threejs.org/) `^0.183.0` (ES modules).
 - **Rendering**: **WebGPU** via `three/webgpu` — not `WebGLRenderer`. Node materials and **TSL** (`three/tsl`) drive the water surface, sky background, and fullscreen post output.
@@ -132,7 +132,7 @@ These read **`config.waves.wave1`–`wave4`**, **`config.waves.spatialScale`**, 
 - **WASD** in a `keys` map (`keydown` / `keyup`).
 - **Pointer lock** on canvas click; `mousemove` updates **`camOrbit.yaw`** / **`pitch`** when locked.
 - **Scroll wheel** on the canvas (non-passive): stepped zoom on **`camOrbit.distance`** using **`config.camera`** (`distanceStep`, min/max); distance is clamped each frame so live Tweakpane edits apply.
-- **`#hint`** in **`index.html`**: fixed bottom-left panel with illustrated control rows (inline SVGs); **`main.js`** toggles **`is-locked`** on pointer lock to swap the primary row (click to capture vs ESC to release). Spanish copy.
+- **`#hint`** in **`index.html`**: fixed bottom-left panel with illustrated control rows (inline SVGs); **`main.js`** toggles **`is-locked`** on pointer lock to swap the primary row (click to lock pointer vs ESC to release). English copy.
 
 ### 7. Orbit camera
 
