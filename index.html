@@ -11,9 +11,11 @@
     #hint {
       position: fixed;
       left: 16px;
-      top: 50%;
-      transform: translateY(-50%);
+      bottom: 16px;
+      top: auto;
+      width: min(280px, calc(100vw - 32px));
       max-width: min(280px, calc(100vw - 32px));
+      box-sizing: border-box;
       color: #fff;
       text-shadow: 0 1px 4px rgba(0,0,0,0.5);
       font-size: 13px;
@@ -56,37 +58,52 @@
       opacity: 0.88;
       font-weight: 400;
     }
-    .hint-label-stack { flex: 1; min-width: 0; }
-    #hint.is-locked .hint-only-unlocked { display: none; }
-    #hint:not(.is-locked) .hint-only-locked { display: none; }
-    #hint.is-locked .hint-mouse-unlocked { display: none; }
-    #hint:not(.is-locked) .hint-mouse-locked { display: none; }
+    /* Stack alternate primary rows in one grid cell so row height = max(both); use visibility not display */
+    .hint-swap-slot {
+      display: grid;
+      grid-template-columns: 1fr;
+    }
+    .hint-swap-slot > .hint-row {
+      grid-area: 1 / 1;
+      align-self: start;
+    }
+    #hint.is-locked .hint-only-unlocked,
+    #hint:not(.is-locked) .hint-only-locked {
+      visibility: hidden;
+      pointer-events: none;
+    }
+    #hint:not(.is-locked) .hint-only-unlocked,
+    #hint.is-locked .hint-only-locked {
+      visibility: visible;
+    }
   </style>
 </head>
 <body>
   <div id="hint" class="controls-hint" role="status" aria-live="polite" aria-atomic="true">
-    <div class="hint-row hint-only-unlocked">
-      <div class="hint-icon" aria-hidden="true">
-        <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M8 6l4 14 3-6 6 2L8 6z" fill="currentColor" fill-opacity="0.25" stroke="currentColor"/>
-          <circle cx="22" cy="20" r="5" stroke-dasharray="2 2" opacity="0.9"/>
-        </svg>
+    <div class="hint-swap-slot">
+      <div class="hint-row hint-only-unlocked">
+        <div class="hint-icon" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 6l4 14 3-6 6 2L8 6z" fill="currentColor" fill-opacity="0.25" stroke="currentColor"/>
+            <circle cx="22" cy="20" r="5" stroke-dasharray="2 2" opacity="0.9"/>
+          </svg>
+        </div>
+        <div class="hint-label">
+          <strong>Capturar cursor</strong>
+          <small>Haz clic en el lienzo para mirar alrededor con el ratón.</small>
+        </div>
       </div>
-      <div class="hint-label">
-        <strong>Capturar cursor</strong>
-        <small>Haz clic en el lienzo para mirar alrededor con el ratón.</small>
-      </div>
-    </div>
-    <div class="hint-row hint-only-locked">
-      <div class="hint-icon" aria-hidden="true">
-        <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-          <rect x="4" y="9" width="24" height="16" rx="2" fill="currentColor" fill-opacity="0.15"/>
-          <path d="M9 16h4M15 16h8M9 20h14" stroke-width="1.25"/>
-        </svg>
-      </div>
-      <div class="hint-label">
-        <strong>Liberar cursor</strong>
-        <small>Pulsa ESC para volver al modo normal.</small>
+      <div class="hint-row hint-only-locked">
+        <div class="hint-icon" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+            <rect x="4" y="9" width="24" height="16" rx="2" fill="currentColor" fill-opacity="0.15"/>
+            <path d="M9 16h4M15 16h8M9 20h14" stroke-width="1.25"/>
+          </svg>
+        </div>
+        <div class="hint-label">
+          <strong>Liberar cursor</strong>
+          <small>Pulsa ESC para volver al modo normal.</small>
+        </div>
       </div>
     </div>
     <div class="hint-row">
@@ -111,15 +128,9 @@
           <path d="M10 12l-2-2M22 12l2-2M10 18l-2 2M22 18l2 2M16 3v2M16 25v2"/>
         </svg>
       </div>
-      <div class="hint-label-stack">
-        <div class="hint-label hint-mouse-unlocked">
-          <strong>Ratón</strong>
-          <small>Mirar alrededor (solo con el cursor capturado).</small>
-        </div>
-        <div class="hint-label hint-mouse-locked">
-          <strong>Ratón</strong>
-          <small>Girar la cámara.</small>
-        </div>
+      <div class="hint-label">
+        <strong>Ratón</strong>
+        <small>Mirar alrededor (solo con el cursor capturado).</small>
       </div>
     </div>
     <div class="hint-row">
