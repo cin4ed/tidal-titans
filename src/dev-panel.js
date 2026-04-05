@@ -15,6 +15,7 @@ function serializeConfig(config) {
 const config = {
   waves: {
     spatialScale: ${n(w.spatialScale)},
+    ampScale: ${n(w.ampScale)},
     wave1: { freq: ${n(w.wave1.freq)}, speed: ${n(w.wave1.speed)}, amp: ${n(w.wave1.amp)} },
     wave2: { freq: ${n(w.wave2.freq)}, speed: ${n(w.wave2.speed)}, amp: ${n(w.wave2.amp)} },
     wave3: { freq: ${n(w.wave3.freq)}, speed: ${n(w.wave3.speed)}, amp: ${n(w.wave3.amp)} },
@@ -70,6 +71,12 @@ export function mountDevPanel(config, options = {}) {
     min: 0.25,
     max: 8,
     step: 0.05,
+  });
+  wavesFolder.addBinding(config.waves, 'ampScale', {
+    label: 'All layers amp',
+    min: 0,
+    max: 4,
+    step: 0.02,
   });
   [1, 2, 3, 4].forEach((i) => {
     const key = `wave${i}`;

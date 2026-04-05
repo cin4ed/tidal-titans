@@ -76,6 +76,7 @@ Default export: **`config`**. The dev panel edits this object in memory; **Expor
 | ----- | ---- | ---- |
 | Wave layers | `config.waves.wave1`–`wave4` — each `{ freq, speed, amp }` | Used by **CPU** `waveHeight` / `waveNormal` (boat bob/tilt) and mirrored in **TSL** vertex displacement (scaled by `config.water.waveVisualScale` for the mesh). |
 | Wave spatial scale | `config.waves.spatialScale` | **Proportional world scaling** of the sine wave field: divides X/Z inside the wave phase (longer wavelengths, fewer crests per area when > 1) and multiplies each layer’s **amp** by the same factor so steepness stays consistent. Synced to TSL; affects **both** boat physics and GPU displacement (unlike `waveVisualScale`). Dev panel: **Spatial scale** under Boat Wave Physics. |
+| Wave amplitude scale | `config.waves.ampScale` | Global multiplier for **all four** layer **amp** values at once (after spatial scaling in the height formula). Synced to TSL; affects **both** boat physics and GPU displacement. Dev panel: **All layers amp** under Boat Wave Physics. |
 | Water colors | `config.water.colorDeep`, `config.water.colorLight` (hex) | Worley-mixed surface tint in TSL; driven by **`uniform` colors** synced each frame from `config` (dev panel live). `colorDeep` is also the scene **fog** tint (synced each frame when fog is enabled). |
 | Sky gradient | `config.sky.horizon`, `config.sky.zenith` (hex) | **`scene.backgroundNode`**: TSL `normalWorld.y` mix between the two; **`uniform` colors** synced each frame — **independent** from water deep/light. |
 | Visual scale | `config.water.waveVisualScale` | Multiplies vertex wave height on the water plane only (0 = flat water, physics unchanged). Independent from **`spatialScale`** (which retunes wavelength density for both CPU and GPU). |
@@ -95,10 +96,10 @@ There is **no** separate GLSL file: water appearance is entirely **TSL node grap
 
 ### 1. Wave math (CPU — boat physics)
 
-- **`waveHeight(x, z, t)`** — same layered sine recipe as in TSL (must stay aligned). Uses **`config.waves.spatialScale`**: world coordinates are divided by it in the sine phases, and each layer’s amplitude is multiplied by it (values clamped to a small minimum to avoid divide-by-zero).
+- **`waveHeight(x, z, t)`** — same layered sine recipe as in TSL (must stay aligned). Uses **`config.waves.spatialScale`** (world XZ ÷ scale, per-layer amp × scale) and **`config.waves.ampScale`** (multiplies every layer’s contribution; clamped ≥ 0).
 - **`waveNormal(x, z, t)`** — finite-difference gradient for pitch/roll.
 
-These read **`config.waves.wave1`–`wave4`** and **`config.waves.spatialScale`**. They do **not** use `config.water.waveVisualScale`; that affects only the rendered water mesh height multiplier.
+These read **`config.waves.wave1`–`wave4`**, **`config.waves.spatialScale`**, and **`config.waves.ampScale`**. They do **not** use `config.water.waveVisualScale`; that affects only the rendered water mesh height multiplier.
 
 ### 2. Scene & renderer
 
@@ -116,7 +117,7 @@ These read **`config.waves.wave1`–`wave4`** and **`config.waves.spatialScale`*
 ### 4. TSL water (`MeshBasicNodeMaterial`)
 
 - **Geometry**: `PlaneGeometry(220, 220, 200, 200)` rotated −90° on X (lies in XZ).
-- **Vertex**: `positionLocal` displaced in Y by a TSL expression that **mirrors** `waveHeight`: local **X/Z** are divided by **`uniform(config.waves.spatialScale)`**, each sine amplitude is multiplied by that same uniform, then the result is multiplied by **`uniform(config.water.waveVisualScale)`** for the final mesh offset (initial uniform values from `config` at material setup).
+- **Vertex**: `positionLocal` displaced in Y by a TSL expression that **mirrors** `waveHeight`: local **X/Z** are divided by **`uniform(config.waves.spatialScale)`**, each sine amplitude is multiplied by spatial scale and **`uniform(config.waves.ampScale)`**, then the result is multiplied by **`uniform(config.water.waveVisualScale)`** for the final mesh offset (initial uniform values from `config` at material setup).
 - **Uniforms**: `uniform(...)` nodes for each wave component, Worley/refraction, **water deep/light colors**, and **sky horizon/zenith**; **each frame** the animation loop assigns `.value` / `THREE.Color.set()` from `config` (so Tweakpane and exported config both apply).
 - **Fragment**: Worley-based `waterColor`; **backdrop** samples the scene via `viewportSharedTexture` with refraction UVs and depth tests so geometry above the water is not incorrectly refracted. Transparency enabled for the water mesh.
 
@@ -155,7 +156,7 @@ Final draw: **`renderPipeline.render()`** (not `renderer.render(scene, camera)` 
 ### 9. Animation loop
 
 1. **`timer.update()`** — `THREE.Timer` for stable `dt` / elapsed `t`.
-2. Sync **all** TSL **`uniform().value`** / color uniforms from **`config.waves`**, **`config.water`**, and **`config.sky`** (wave layers, **`spatialScale`**, visual scale, Worley, refraction, water/sky colors); sync **`scene.fog`** from **`config.fog`** / **`config.water.colorDeep`** when fog is enabled.
+2. Sync **all** TSL **`uniform().value`** / color uniforms from **`config.waves`**, **`config.water`**, and **`config.sky`** (wave layers, **`spatialScale`**, **`ampScale`**, visual scale, Worley, refraction, water/sky colors); sync **`scene.fog`** from **`config.fog`** / **`config.water.colorDeep`** when fog is enabled.
 3. Underwater mesh motion.
 4. Sail / flag flutter using **`boatObj.*`** mesh refs.
 5. Boat speed, turn, **`waveHeight`** for Y, **`waveNormal`** for pitch/roll lerp.
@@ -203,7 +204,7 @@ Skills are mirrored under both `.agents/skills/` and `.claude/skills/`. If you u
 
 ## Key constraints and gotchas
 
-1. **Wave formula: JS ↔ TSL** — `waveHeight()` in JS and the TSL `vY` expression (same sines, same `config.waves.wave1`–`wave4` inputs) must stay identical or the boat will not sit on the waves you see. **`config.waves.spatialScale`** must match in both (world XZ ÷ scale, amp × scale). **`config.water.waveVisualScale` only scales the final GPU vertex offset**, not physics.
+1. **Wave formula: JS ↔ TSL** — `waveHeight()` in JS and the TSL `vY` expression (same sines, same `config.waves.wave1`–`wave4` inputs) must stay identical or the boat will not sit on the waves you see. **`config.waves.spatialScale`** and **`config.waves.ampScale`** must match in both. **`config.water.waveVisualScale` only scales the final GPU vertex offset**, not physics.
 2. **`config.js` is the source of truth for tuning** — prefer exporting from Tweakpane into `config.js` (default export **`config`**) rather than scattering magic numbers. **Sky** is **`config.sky.horizon` / `zenith`** (not water deep/light). Scene fog color tracks **`config.water.colorDeep`**. Some aesthetic colors still live in `main.js` (e.g. post vignette tint `0x74ccf4`, lights); align with palette when retuning.
 3. **No duplicate GLSL ocean shader** — everything water-related is TSL in `main.js`; there is no `syncUniforms()` name or separate vertex/fragment GLSL strings.
 4. **Camera yaw is world-absolute** — do not derive yaw from `boat.rotation.y` or the camera will corkscrew when turning.
