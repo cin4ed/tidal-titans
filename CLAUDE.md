@@ -99,7 +99,7 @@ There is **no** separate GLSL file: water appearance is entirely **TSL node grap
 
 ### 1. Wave math (CPU — boat physics)
 
-- `**waveHeight(x, z, t)**` — same layered sine recipe as in TSL (must stay aligned). Uses `**config.waves.spatialScale**` (world XZ ÷ scale, per-layer amp × scale) and `**config.waves.ampScale**` (multiplies every layer’s contribution; clamped ≥ 0).
+- `**waveHeight(x, z, t)`** — same layered sine recipe as in TSL (must stay aligned). Uses `**config.waves.spatialScale`** (world XZ ÷ scale, per-layer amp × scale) and `**config.waves.ampScale**` (multiplies every layer’s contribution; clamped ≥ 0).
 - `**waveNormal(x, z, t)**` — finite-difference gradient for pitch/roll.
 
 These read `**config.waves.wave1`–`wave4**`, `**config.waves.spatialScale**`, and `**config.waves.ampScale**`. They do **not** use `config.water.waveVisualScale`; that affects only the rendered water mesh height multiplier.
@@ -107,7 +107,7 @@ These read `**config.waves.wave1`–`wave4**`, `**config.waves.spatialScale**`, 
 ### 2. Scene & renderer
 
 - `**THREE.Scene`** + optional `**THREE.Fog`** when `config.fog.enabled`: color from `config.water.colorDeep`, distances from `config.fog.near` / `far` (all synced each frame when on).
-- `**scene.backgroundNode**`: TSL mix on `normalWorld.y` between `**config.sky.horizon**` and `**config.sky.zenith**` (uniform-backed; live with dev panel) — **not** tied to water colors.
+- `**scene.backgroundNode`**: TSL mix on `normalWorld.y` between `**config.sky.horizon`** and `**config.sky.zenith**` (uniform-backed; live with dev panel) — **not** tied to water colors.
 - `**THREE.PerspectiveCamera`** (FOV 55, **near 0.25**, far 500).
 - `**THREE.WebGPURenderer`**: antialias, sRGB output, pixel ratio capped at 2.
 
@@ -127,8 +127,8 @@ These read `**config.waves.wave1`–`wave4**`, `**config.waves.spatialScale**`, 
 ### 5. Boat
 
 - `**createPirateShip()`** from `**./models/pirateShip.js`** returns `{ group, mainSail, topSail, foreSail, flagMain, portCannonMuzzleLocal, mainSailBaseZ, topSailBaseZ, foreSailBaseZ }`.
-- `**portCannonMuzzleLocal**`: three `THREE.Vector3` offsets (ship-local) for **port-side** muzzle positions; used to spawn cannonballs and the trajectory preview.
-- The `**group`** uses `**rotation.y = Math.PI**` so local +Z aligns with the movement/heading convention used in `main.js`.
+- `**portCannonMuzzleLocal`**: three `THREE.Vector3` offsets (ship-local) for **port-side** muzzle positions; used to spawn cannonballs and the trajectory preview.
+- The `**group`** uses `**rotation.y = Math.PI`** so local +Z aligns with the movement/heading convention used in `main.js`.
 - Procedural **MeshStandardMaterial** (flat shaded) hull, masts, rigging, sails, cannons (port and starboard meshes), etc.; **jolly roger** plane uses a dark material (not red). **Gameplay** fires **port broadside only** (see below).
 
 ### 6. Input
@@ -136,14 +136,14 @@ These read `**config.waves.wave1`–`wave4**`, `**config.waves.spatialScale**`, 
 - **WASD** in a `keys` map (`keydown` / `keyup`).
 - **Pointer lock** on canvas click; `mousemove` updates `**camOrbit.yaw`** / `**pitch`** when locked.
 - **Scroll wheel** on the canvas (non-passive): stepped zoom on `**camOrbit.distance`** using `**config.camera`** (`distanceStep`, min/max); distance is clamped each frame so live Tweakpane edits apply.
-- `**#hint**` in `**index.html**`: fixed bottom-left panel with illustrated control rows (inline SVGs); `**main.js**` toggles `**is-locked**` on pointer lock to swap the primary row (click to lock pointer vs ESC to release). English copy.
+- `**#hint`** in `**index.html`**: fixed bottom-left panel with illustrated control rows (inline SVGs); `**main.js**` toggles `**is-locked**` on pointer lock to swap the primary row (click to lock pointer vs ESC to release). English copy.
 
 ### 7. Port broadside cannons (combat)
 
 - **When**: Only while **pointer is locked** on the canvas (`document.pointerLockElement === renderer.domElement`).
-- **Charge / fire**: `**mousedown`** (button 0) starts charging if off cooldown; `**document.mouseup**` (button 0) ends charge and queues a **three-gun volley** with stagger from `**config.combat.volleyStagger`**. Hold duration maps to **power** between `**config.combat.powerMin`** and `**powerMax**` over `**maxChargeTime**` (wall-clock). **Cooldown** applied on release via `**config.combat.cooldown`**.
+- **Charge / fire**: `**mousedown`** (button 0) starts charging if off cooldown; `**document.mouseup`** (button 0) ends charge and queues a **three-gun volley** with stagger from `**config.combat.volleyStagger`**. Hold duration maps to power between `**config.combat.powerMin`** and `**powerMax**` over `**maxChargeTime**` (wall-clock). **Cooldown** applied on release via `**config.combat.cooldown`**.
 - **Cancel charge**: Losing pointer lock (`**pointerlockchange`**, e.g. ESC) clears charging **without** firing.
-- **Ballistics**: World-space spheres parented to `**scene`**; initial velocity = horizontal **port** direction (`**-rightVec`** in XZ, normalized) × `**muzzleSpeed * powerScale**` + `**boatForward * speed**`. Integration matches preview: `**velocity.y -= config.combat.gravity * dt**`, position += velocity × dt. Per-shot **max horizontal range** and **max lifetime** scale with power (range endpoints from `**rangeAtMinPower`** / `**rangeAtMaxPower**`).
+- **Ballistics**: World-space spheres parented to `**scene`**; initial velocity = horizontal port direction (`**-rightVec`** in XZ, normalized) × `**muzzleSpeed * powerScale**` + `**boatForward * speed**`. Integration matches preview: `**velocity.y -= config.combat.gravity * dt**`, position += velocity × dt. Per-shot **max horizontal range** and **max lifetime** scale with power (range endpoints from `**rangeAtMinPower`** / `**rangeAtMaxPower`**).
 - **Trajectory preview**: While charging (and off cooldown), a `**THREE.Line`** shows a sampled arc from the **preview muzzle** (`**trajectoryPreviewMuzzleIndex`**, clamped 0–2). Integration uses `**trajectorySampleDt`** and up to `**trajectoryMaxSteps**` (clamped to an internal buffer cap). Stops when below `**waveHeight(x, z, t)**`, beyond preview range, or step cap.
 - **Starboard**: Not wired for firing yet; only a sign flip away from port math.
 
@@ -160,7 +160,7 @@ camOrbit = { yaw, pitch, distance, sensitivity: 0.0022, pitchMin, pitchMax }
 
 ### 9. Post-processing (`THREE.RenderPipeline`)
 
-- `**pass(scene, camera)**` → color + linear depth.
+- `**pass(scene, camera)`** → color + linear depth.
 - **Gaussian blur** on color; blur strength selected by a **water mask** (roughly: above vs below water line in screen space).
 - **Output**: blurred color above water; under the mask, tinted + vignette (`0x74ccf4` tint — align with palette when changing water colors).
 
@@ -169,13 +169,13 @@ Final draw: `**renderPipeline.render()`** (not `renderer.render(scene, camera)` 
 ### 10. Animation loop
 
 1. `**timer.update()`** — `THREE.Timer` for stable `dt` / elapsed `t`.
-2. Sync **all** TSL `**uniform().value`** / color uniforms from `**config.waves`**, `**config.water**`, and `**config.sky**` (wave layers, `**spatialScale**`, `**ampScale**`, visual scale, Worley, refraction, water/sky colors); sync `**scene.fog**` from `**config.fog**` / `**config.water.colorDeep**` when fog is enabled.
+2. Sync **all** TSL `**uniform().value`** / color uniforms from `**config.waves`**, `**config.water`**, and `**config.sky**` (wave layers, `**spatialScale**`, `**ampScale**`, visual scale, Worley, refraction, water/sky colors); sync `**scene.fog**` from `**config.fog**` / `**config.water.colorDeep**` when fog is enabled.
 3. Underwater mesh motion.
 4. Sail / flag flutter using `**boatObj.***` mesh refs.
 5. Boat speed, turn, `**waveHeight**` for Y, `**waveNormal**` for pitch/roll lerp; `**rightVec**` for cannon aim.
 6. Cannon **shot queue** (staggered spawns) and **projectile** integration (`**config.combat.gravity`**); **trajectory line** update while charging.
 7. Camera lerp + `**lookAt`**.
-8. `**renderPipeline.render()**`.
+8. `**renderPipeline.render()`**.
 
 ### 11. Dev panel (conditional)
 
@@ -197,7 +197,7 @@ Production builds omit this import via tree-shaking.
 
 ## src/models/pirateShip.js
 
-`**export function createPirateShip()**` builds the full `**THREE.Group**`. Keep bow orientation along **local +Z** (cone + `rotation.x = π/2`) so the hull matches navigation and rigging. Returns animatable sail/flag meshes, `**portCannonMuzzleLocal`**, and the group for the main loop.
+`**export function createPirateShip()`** builds the full `**THREE.Group`**. Keep bow orientation along **local +Z** (cone + `rotation.x = π/2`) so the hull matches navigation and rigging. Returns animatable sail/flag meshes, `**portCannonMuzzleLocal`**, and the group for the main loop.
 
 ---
 
