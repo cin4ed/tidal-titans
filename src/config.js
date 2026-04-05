@@ -3,12 +3,15 @@
 // and paste the result here to make your changes permanent.
 
 const oceanConfig = {
-  // Wave layers used by JS physics for boat bobbing (waveHeight / waveNormal).
-  // These are NOT visual — the water surface is rendered via TSL refraction.
+  // Wave layers — shared by JS boat physics AND the TSL visual wave displacement.
+  // freq = spatial frequency, speed = time speed, amp = height amplitude.
   wave1: { freq: 0.5,  speed: 1.2,  amp: 0.60 },
   wave2: { freq: 0.7,  speed: 0.8,  amp: 0.40 },
   wave3: { freq: 0.3,  speed: 1.5,  amp: 0.30 },
   wave4: { freq: 1.5,  speed: 2.0,  amp: 0.15 },
+
+  // Visual wave displacement scale (1.0 = same amplitude as boat physics, 0 = flat)
+  waveVisualScale: 1.0,
 
   // Water surface colors (hex)
   waterColorDeep:  '#0487e2',
@@ -18,7 +21,7 @@ const oceanConfig = {
   noiseSpeed: 0.8,
 
   // Worley noise spatial scale (world-space frequency). Higher = smaller / finer
-  // cells on the water (more “caustic-like” detail); lower = larger blobs.
+  // cells on the water (more "caustic-like" detail); lower = larger blobs.
   worleyScale0: 4,
   worleyScale1: 2,
 
