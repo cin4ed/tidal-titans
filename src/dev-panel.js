@@ -21,6 +21,10 @@ const oceanConfig = {
   // How fast the worley noise scrolls (controls wave animation speed)
   noiseSpeed: ${n(config.noiseSpeed)},
 
+  // Worley noise spatial scale (higher = finer cells on the water)
+  worleyScale0: ${n(config.worleyScale0)},
+  worleyScale1: ${n(config.worleyScale1)},
+
   // Refraction distortion amount (0 = no distortion, 0.15 = strong)
   refractionStrength: ${n(config.refractionStrength)},
 
@@ -57,6 +61,14 @@ export function mountDevPanel(config) {
   waterFolder.addBinding(config, 'noiseSpeed', {
     label: 'Noise speed',
     min: 0.0, max: 3.0, step: 0.01,
+  });
+  waterFolder.addBinding(config, 'worleyScale0', {
+    label: 'Worley scale 0',
+    min: 0.1, max: 16, step: 0.05,
+  });
+  waterFolder.addBinding(config, 'worleyScale1', {
+    label: 'Worley scale 1',
+    min: 0.1, max: 16, step: 0.05,
   });
   waterFolder.addBinding(config, 'refractionStrength', {
     label: 'Refraction',

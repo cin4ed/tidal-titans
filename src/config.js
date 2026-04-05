@@ -17,6 +17,11 @@ const oceanConfig = {
   // How fast the worley noise scrolls (controls wave animation speed)
   noiseSpeed: 0.8,
 
+  // Worley noise spatial scale (world-space frequency). Higher = smaller / finer
+  // cells on the water (more “caustic-like” detail); lower = larger blobs.
+  worleyScale0: 4,
+  worleyScale1: 2,
+
   // Refraction distortion amount (0 = no distortion, 0.15 = strong)
   refractionStrength: 0.1,
 

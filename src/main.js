@@ -13,6 +13,7 @@ import {
   mx_worley_noise_float,
   positionWorld,
   time,
+  uniform,
 } from 'three/tsl';
 import { gaussianBlur } from 'three/addons/tsl/display/GaussianBlurNode.js';
 
@@ -117,11 +118,16 @@ async function init() {
 
   // ——— TSL Water Material ———
   // Animating worley noise drives both the surface color and refraction UV offset.
-  const t = time.mul(oceanConfig.noiseSpeed);
+  // Uniforms so dev-panel tweaks to worley scales apply every frame.
+  const uNoiseSpeed = uniform(oceanConfig.noiseSpeed);
+  const uWorleyScale0 = uniform(oceanConfig.worleyScale0);
+  const uWorleyScale1 = uniform(oceanConfig.worleyScale1);
+
+  const t = time.mul(uNoiseSpeed);
   const floorUV = positionWorld.xzy;
 
-  const waterLayer0 = mx_worley_noise_float(floorUV.mul(4).add(t));
-  const waterLayer1 = mx_worley_noise_float(floorUV.mul(2).add(t));
+  const waterLayer0 = mx_worley_noise_float(floorUV.mul(uWorleyScale0).add(t));
+  const waterLayer1 = mx_worley_noise_float(floorUV.mul(uWorleyScale1).add(t));
   const waterIntensity = waterLayer0.mul(waterLayer1);
 
   const waterColorDeep  = color(oceanConfig.waterColorDeep);
@@ -137,8 +143,9 @@ async function init() {
 
   // Refraction: offset screen UV by the water noise, then depth-test so
   // objects above the water surface are never refracted
+  const uRefractionStrength = uniform(oceanConfig.refractionStrength);
   const refractionUV = screenUV.add(
-    vec2(0, waterIntensity.mul(oceanConfig.refractionStrength))
+    vec2(0, waterIntensity.mul(uRefractionStrength))
   );
   const depthTestForRefraction = linearDepth(viewportDepthTexture(refractionUV)).sub(depth);
   const depthRefraction = depthTestForRefraction.remapClamp(0, 0.1);
@@ -334,6 +341,13 @@ async function init() {
     timer.update();
     const dt = Math.min(timer.getDelta(), 0.1);
     const t = timer.getElapsed();
+
+    // Sync TSL uniforms from oceanConfig (live dev-panel + exported defaults)
+    const c = oceanConfig;
+    uNoiseSpeed.value = c.noiseSpeed;
+    uWorleyScale0.value = c.worleyScale0;
+    uWorleyScale1.value = c.worleyScale1;
+    uRefractionStrength.value = c.refractionStrength;
 
     // Animate underwater objects
     for (const obj of underwaterObjects.children) {
