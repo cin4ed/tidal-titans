@@ -263,6 +263,14 @@ async function init() {
     camOrbit.pitch = THREE.MathUtils.clamp(camOrbit.pitch, camOrbit.pitchMin, camOrbit.pitchMax);
   });
 
+  // ——— Scroll-wheel zoom ———
+  renderer.domElement.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const { distanceMin, distanceMax, distanceStep } = oceanConfig.orbitCamera;
+    camOrbit.distance += Math.sign(e.deltaY) * distanceStep;
+    camOrbit.distance = THREE.MathUtils.clamp(camOrbit.distance, distanceMin, distanceMax);
+  }, { passive: false });
+
   // ——— Resize ———
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -366,7 +374,12 @@ async function init() {
     boat.rotation.x = THREE.MathUtils.lerp(boat.rotation.x, boatPitch, 0.12);
     boat.rotation.z = THREE.MathUtils.lerp(boat.rotation.z, boatRoll, 0.12);
 
-    // Orbit camera
+    // Orbit camera — clamp distance each frame so live Tweakpane changes take effect immediately
+    camOrbit.distance = THREE.MathUtils.clamp(
+      camOrbit.distance,
+      oceanConfig.orbitCamera.distanceMin,
+      oceanConfig.orbitCamera.distanceMax,
+    );
     const sinYaw   = Math.sin(camOrbit.yaw);
     const cosYaw   = Math.cos(camOrbit.yaw);
     const sinPitch = Math.sin(camOrbit.pitch);

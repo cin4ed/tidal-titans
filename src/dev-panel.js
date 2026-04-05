@@ -38,6 +38,13 @@ const oceanConfig = {
   // Fog
   fogNear: ${n(config.fogNear, 1)},
   fogFar:  ${n(config.fogFar, 1)},
+
+  // Orbit camera zoom (scroll wheel)
+  orbitCamera: {
+    distanceMin:  ${n(config.orbitCamera.distanceMin, 1)},
+    distanceMax:  ${n(config.orbitCamera.distanceMax, 1)},
+    distanceStep: ${n(config.orbitCamera.distanceStep, 2)},
+  },
 };
 
 export default oceanConfig;
@@ -91,6 +98,21 @@ export function mountDevPanel(config) {
   const fogFolder = pane.addFolder({ title: 'Fog', expanded: false });
   fogFolder.addBinding(config, 'fogNear', { label: 'near', min: 1,  max: 50,  step: 1 });
   fogFolder.addBinding(config, 'fogFar',  { label: 'far',  min: 10, max: 200, step: 1 });
+
+  // ——— Camera / Orbit ———
+  const cameraFolder = pane.addFolder({ title: 'Camera / Orbit', expanded: false });
+  cameraFolder.addBinding(config.orbitCamera, 'distanceMin', {
+    label: 'Zoom min',
+    min: 1, max: 80, step: 0.5,
+  });
+  cameraFolder.addBinding(config.orbitCamera, 'distanceMax', {
+    label: 'Zoom max',
+    min: 5, max: 120, step: 0.5,
+  });
+  cameraFolder.addBinding(config.orbitCamera, 'distanceStep', {
+    label: 'Step size',
+    min: 0.25, max: 5, step: 0.25,
+  });
 
   // ——— Export config ———
   pane.addBlade({ view: 'separator' });

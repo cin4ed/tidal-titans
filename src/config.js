@@ -34,6 +34,13 @@ const oceanConfig = {
   // Fog
   fogNear: 1,
   fogFar:  200,
+
+  // Orbit camera zoom (scroll wheel)
+  orbitCamera: {
+    distanceMin:  5,
+    distanceMax:  50,
+    distanceStep: 1,
+  },
 };
 
 export default oceanConfig;
