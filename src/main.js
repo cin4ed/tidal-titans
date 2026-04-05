@@ -273,6 +273,41 @@ async function init() {
     camOrbit.pitch = THREE.MathUtils.clamp(camOrbit.pitch, camOrbit.pitchMin, camOrbit.pitchMax);
   });
 
+  // ——— Port broadside (pointer locked + left click) ———
+  const CANNON_MUZZLE_SPEED = 45;
+  const CANNON_GRAVITY = 15;
+  const CANNON_MAX_LIFE = 5;
+  const CANNON_MAX_RANGE = 120;
+  const CANNON_VOLLEY_STAGGER = 0.07;
+  const CANNON_COOLDOWN = 0.65;
+
+  const cannonBallGeo = new THREE.SphereGeometry(0.12, 8, 8);
+  const cannonBallMat = new THREE.MeshStandardMaterial({
+    color: 0x1a1a1a,
+    roughness: 0.85,
+    metalness: 0.45,
+    flatShading: true,
+  });
+
+  /** @type {{ mesh: THREE.Mesh, velocity: THREE.Vector3, age: number, spawnX: number, spawnZ: number }[]} */
+  const cannonProjectiles = [];
+  /** @type {{ fireAt: number, muzzleIndex: number }[]} */
+  const cannonShotQueue = [];
+  let cannonVolleyRequested = false;
+  let cannonCooldownUntil = 0;
+
+  const muzzleWorld = new THREE.Vector3();
+  const portBroadsideDir = new THREE.Vector3();
+  const boatVelAtFire = new THREE.Vector3();
+  const cannonSpawnVel = new THREE.Vector3();
+
+  renderer.domElement.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    if (document.pointerLockElement !== renderer.domElement) return;
+    e.preventDefault();
+    cannonVolleyRequested = true;
+  });
+
   // ——— Scroll-wheel zoom ———
   renderer.domElement.addEventListener('wheel', (e) => {
     e.preventDefault();
@@ -295,6 +330,34 @@ async function init() {
   const camDesired  = new THREE.Vector3();
   const worldUp     = new THREE.Vector3(0, 1, 0);
   const rightVec    = new THREE.Vector3();
+
+  function spawnCannonProjectile(muzzleIndex) {
+    const locals = boatObj.portCannonMuzzleLocal;
+    if (!locals || muzzleIndex < 0 || muzzleIndex >= locals.length) return;
+
+    boat.updateMatrixWorld(true);
+    muzzleWorld.copy(locals[muzzleIndex]).applyMatrix4(boat.matrixWorld);
+
+    portBroadsideDir.set(-rightVec.x, 0, -rightVec.z);
+    if (portBroadsideDir.lengthSq() < 1e-8) portBroadsideDir.set(-1, 0, 0);
+    portBroadsideDir.normalize();
+    muzzleWorld.addScaledVector(portBroadsideDir, 0.06);
+
+    boatVelAtFire.copy(boatForward).multiplyScalar(speed);
+    cannonSpawnVel.copy(portBroadsideDir).multiplyScalar(CANNON_MUZZLE_SPEED).add(boatVelAtFire);
+
+    const mesh = new THREE.Mesh(cannonBallGeo, cannonBallMat);
+    mesh.position.copy(muzzleWorld);
+    scene.add(mesh);
+
+    cannonProjectiles.push({
+      mesh,
+      velocity: cannonSpawnVel.clone(),
+      age: 0,
+      spawnX: muzzleWorld.x,
+      spawnZ: muzzleWorld.z,
+    });
+  }
 
   // ——— Post-processing pipeline ———
   // Depth-based blur: stronger blur underwater, vignette above.
@@ -326,6 +389,16 @@ async function init() {
     timer.update();
     const dt = Math.min(timer.getDelta(), 0.1);
     const t = timer.getElapsed();
+
+    if (cannonVolleyRequested) {
+      cannonVolleyRequested = false;
+      if (t >= cannonCooldownUntil) {
+        cannonCooldownUntil = t + CANNON_COOLDOWN;
+        for (let i = 0; i < boatObj.portCannonMuzzleLocal.length; i++) {
+          cannonShotQueue.push({ fireAt: t + i * CANNON_VOLLEY_STAGGER, muzzleIndex: i });
+        }
+      }
+    }
 
     // Sync TSL uniforms from config (live dev-panel + exported defaults)
     const w = config.waves;
@@ -405,6 +478,28 @@ async function init() {
     const boatRoll  = Math.asin(THREE.MathUtils.clamp(n.dot(rightVec), -0.4, 0.4));
     boat.rotation.x = THREE.MathUtils.lerp(boat.rotation.x, boatPitch, 0.12);
     boat.rotation.z = THREE.MathUtils.lerp(boat.rotation.z, boatRoll, 0.12);
+
+    for (let i = cannonShotQueue.length - 1; i >= 0; i--) {
+      const q = cannonShotQueue[i];
+      if (t >= q.fireAt) {
+        spawnCannonProjectile(q.muzzleIndex);
+        cannonShotQueue.splice(i, 1);
+      }
+    }
+
+    const maxRangeSq = CANNON_MAX_RANGE * CANNON_MAX_RANGE;
+    for (let i = cannonProjectiles.length - 1; i >= 0; i--) {
+      const p = cannonProjectiles[i];
+      p.age += dt;
+      p.velocity.y -= CANNON_GRAVITY * dt;
+      p.mesh.position.addScaledVector(p.velocity, dt);
+      const dx = p.mesh.position.x - p.spawnX;
+      const dz = p.mesh.position.z - p.spawnZ;
+      if (p.age > CANNON_MAX_LIFE || dx * dx + dz * dz > maxRangeSq) {
+        scene.remove(p.mesh);
+        cannonProjectiles.splice(i, 1);
+      }
+    }
 
     // Orbit camera — clamp distance each frame so live Tweakpane changes take effect immediately
     camOrbit.distance = THREE.MathUtils.clamp(

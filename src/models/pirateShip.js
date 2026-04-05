@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 
-/** Procedural pirate ship; returns { group, mainSail, topSail, foreSail, flagMain, ...baseZ } for the animation loop. */
+/** Procedural pirate ship; returns { group, sails, flag, portCannonMuzzleLocal, ...baseZ } for the animation loop. */
 export function createPirateShip() {
   const boat = new THREE.Group();
 
@@ -151,6 +151,11 @@ export function createPirateShip() {
 
   // ——— Cannons ———
   const cannonPositions = [-1.2, 0.1, 1.6];
+  const barrelHalfLen = 0.75 * 0.5;
+  const portMuzzleX = -1.35 - barrelHalfLen;
+  const portCannonMuzzleLocal = cannonPositions.map(
+    (cz) => new THREE.Vector3(portMuzzleX, 0.78, cz)
+  );
   for (const cz of cannonPositions) {
     for (const sx of [-1, 1]) {
       const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.095, 0.115, 0.75, 8), metalMat);
@@ -226,6 +231,7 @@ export function createPirateShip() {
     topSail,
     foreSail,
     flagMain,
+    portCannonMuzzleLocal,
     mainSailBaseZ: 0.3,
     topSailBaseZ: 0.3,
     foreSailBaseZ: 2.35,
