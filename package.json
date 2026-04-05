@@ -11,6 +11,7 @@
     "three": "^0.160.0"
   },
   "devDependencies": {
+    "tweakpane": "^4.0.5",
     "vite": "^6.2.0"
   }
 }

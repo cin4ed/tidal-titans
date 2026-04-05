@@ -1,12 +1,15 @@
 import * as THREE from 'three';
+import oceanConfig from './config.js';
 
 // ——— Wave height (must match vertex shader) ———
+// Reads wave parameters from oceanConfig so JS physics and GLSL stay in sync.
 function waveHeight(x, z, time) {
+  const { wave1, wave2, wave3, wave4 } = oceanConfig;
   let h = 0;
-  h += Math.sin(x * 0.5 + time * 1.2) * 0.6;
-  h += Math.sin(z * 0.7 + time * 0.8) * 0.4;
-  h += Math.sin((x + z) * 0.3 + time * 1.5) * 0.3;
-  h += Math.sin(x * 1.5 + z * 0.8 + time * 2.0) * 0.15;
+  h += Math.sin(x * wave1.freq + time * wave1.speed) * wave1.amp;
+  h += Math.sin(z * wave2.freq + time * wave2.speed) * wave2.amp;
+  h += Math.sin((x + z) * wave3.freq + time * wave3.speed) * wave3.amp;
+  h += Math.sin(x * wave4.freq + z * 0.8 + time * wave4.speed) * wave4.amp;
   return h;
 }
 
@@ -21,9 +24,14 @@ function waveNormal(x, z, time, eps = 0.15) {
   return new THREE.Vector3(nx / len, 1 / len, nz / len);
 }
 
+// Helper: convert hex color string to a THREE.Color
+function hexToColor(hex) {
+  return new THREE.Color(hex);
+}
+
 // ——— Scene ———
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0x87ceeb, 35, 120);
+scene.fog = new THREE.Fog(0x87ceeb, oceanConfig.fogNear, oceanConfig.fogFar);
 
 const camera = new THREE.PerspectiveCamera(
   55,
@@ -71,18 +79,24 @@ sunMesh.position.copy(sunDir).multiplyScalar(140);
 scene.add(sunMesh);
 
 // ——— Ocean shader ———
+// Wave params are passed as vec3 uniforms: x=freq, y=speed, z=amp.
+// The GLSL waveHeight mirrors the JS waveHeight formula exactly.
 const oceanVertexShader = `
   uniform float uTime;
+  uniform vec3 uWave1;
+  uniform vec3 uWave2;
+  uniform vec3 uWave3;
+  uniform vec3 uWave4;
   varying vec3 vWorldPos;
   varying vec3 vNormal;
   varying float vHeight;
 
   float waveHeight(vec2 pos, float t) {
     float h = 0.0;
-    h += sin(pos.x * 0.5 + t * 1.2) * 0.6;
-    h += sin(pos.y * 0.7 + t * 0.8) * 0.4;
-    h += sin((pos.x + pos.y) * 0.3 + t * 1.5) * 0.3;
-    h += sin(pos.x * 1.5 + pos.y * 0.8 + t * 2.0) * 0.15;
+    h += sin(pos.x * uWave1.x + t * uWave1.y) * uWave1.z;
+    h += sin(pos.y * uWave2.x + t * uWave2.y) * uWave2.z;
+    h += sin((pos.x + pos.y) * uWave3.x + t * uWave3.y) * uWave3.z;
+    h += sin(pos.x * uWave4.x + pos.y * 0.8 + t * uWave4.y) * uWave4.z;
     return h;
   }
 
@@ -111,6 +125,22 @@ const oceanFragmentShader = `
   uniform vec3 uFogColor;
   uniform float uFogNear;
   uniform float uFogFar;
+
+  uniform vec3 uDeepColor;
+  uniform vec3 uMidColor;
+  uniform vec3 uLightColor;
+  uniform vec3 uFoamColor;
+
+  uniform float uToonSteps;
+  uniform float uSpecPower;
+  uniform float uSpecThreshold;
+  uniform float uSpecIntensity;
+  uniform float uFresnelPower;
+  uniform float uFresnelIntensity;
+  uniform float uFoamStart;
+  uniform float uFoamEnd;
+  uniform float uFoamMax;
+
   varying vec3 vWorldPos;
   varying vec3 vNormal;
   varying float vHeight;
@@ -121,29 +151,24 @@ const oceanFragmentShader = `
     vec3 V = normalize(uCameraPos - vWorldPos);
 
     float ndl = max(dot(N, L), 0.0);
-    float toon = floor(ndl * 4.0) / 4.0;
-
-    vec3 deepColor = vec3(0.02, 0.18, 0.48);
-    vec3 midColor  = vec3(0.05, 0.42, 0.72);
-    vec3 lightCol  = vec3(0.25, 0.75, 0.95);
-    vec3 foamColor = vec3(0.92, 0.97, 1.0);
+    float toon = floor(ndl * uToonSteps) / uToonSteps;
 
     float band = smoothstep(-0.35, 0.9, vHeight);
-    vec3 base = mix(deepColor, midColor, band);
-    base = mix(base, lightCol, smoothstep(0.2, 1.0, vHeight) * 0.65);
+    vec3 base = mix(uDeepColor, uMidColor, band);
+    base = mix(base, uLightColor, smoothstep(0.2, 1.0, vHeight) * 0.65);
 
     vec3 lit = base * (0.35 + 0.85 * toon);
 
     vec3 H = normalize(L + V);
-    float spec = pow(max(dot(N, H), 0.0), 48.0);
-    spec = step(0.35, spec) * 0.85;
+    float spec = pow(max(dot(N, H), 0.0), uSpecPower);
+    spec = step(uSpecThreshold, spec) * uSpecIntensity;
 
-    float fresnel = pow(1.0 - max(dot(V, N), 0.0), 3.0);
-    lit += vec3(0.5, 0.85, 1.0) * fresnel * 0.35;
+    float fresnel = pow(1.0 - max(dot(V, N), 0.0), uFresnelPower);
+    lit += vec3(0.5, 0.85, 1.0) * fresnel * uFresnelIntensity;
 
-    float foam = smoothstep(0.55, 1.05, vHeight);
+    float foam = smoothstep(uFoamStart, uFoamEnd, vHeight);
     foam += smoothstep(0.15, 0.45, 1.0 - ndl) * 0.15;
-    lit = mix(lit, foamColor, clamp(foam, 0.0, 0.85));
+    lit = mix(lit, uFoamColor, clamp(foam, 0.0, uFoamMax));
 
     lit += vec3(1.0, 0.95, 0.8) * spec;
 
@@ -156,12 +181,41 @@ const oceanFragmentShader = `
 `;
 
 const oceanUniforms = {
-  uTime: { value: 0 },
-  uSunDir: { value: sunDir.clone() },
+  uTime:      { value: 0 },
+  uSunDir:    { value: sunDir.clone() },
   uCameraPos: { value: new THREE.Vector3() },
-  uFogColor: { value: new THREE.Color(0x87ceeb) },
-  uFogNear: { value: 35 },
-  uFogFar: { value: 120 },
+  uFogColor:  { value: new THREE.Color(0x87ceeb) },
+  uFogNear:   { value: oceanConfig.fogNear },
+  uFogFar:    { value: oceanConfig.fogFar },
+
+  // Wave layer params (x=freq, y=speed, z=amp)
+  uWave1: { value: new THREE.Vector3(oceanConfig.wave1.freq, oceanConfig.wave1.speed, oceanConfig.wave1.amp) },
+  uWave2: { value: new THREE.Vector3(oceanConfig.wave2.freq, oceanConfig.wave2.speed, oceanConfig.wave2.amp) },
+  uWave3: { value: new THREE.Vector3(oceanConfig.wave3.freq, oceanConfig.wave3.speed, oceanConfig.wave3.amp) },
+  uWave4: { value: new THREE.Vector3(oceanConfig.wave4.freq, oceanConfig.wave4.speed, oceanConfig.wave4.amp) },
+
+  // Colors
+  uDeepColor:  { value: hexToColor(oceanConfig.deepColor) },
+  uMidColor:   { value: hexToColor(oceanConfig.midColor) },
+  uLightColor: { value: hexToColor(oceanConfig.lightColor) },
+  uFoamColor:  { value: hexToColor(oceanConfig.foamColor) },
+
+  // Toon
+  uToonSteps: { value: oceanConfig.toonSteps },
+
+  // Specular
+  uSpecPower:     { value: oceanConfig.specPower },
+  uSpecThreshold: { value: oceanConfig.specThreshold },
+  uSpecIntensity: { value: oceanConfig.specIntensity },
+
+  // Fresnel
+  uFresnelPower:     { value: oceanConfig.fresnelPower },
+  uFresnelIntensity: { value: oceanConfig.fresnelIntensity },
+
+  // Foam
+  uFoamStart: { value: oceanConfig.foamStart },
+  uFoamEnd:   { value: oceanConfig.foamEnd },
+  uFoamMax:   { value: oceanConfig.foamMax },
 };
 
 const oceanGeom = new THREE.PlaneGeometry(220, 220, 160, 160);
@@ -325,6 +379,7 @@ const camTarget = new THREE.Vector3();
 const camDesired = new THREE.Vector3();
 const worldUp = new THREE.Vector3(0, 1, 0);
 const rightVec = new THREE.Vector3();
+const _color = new THREE.Color();
 
 function resize() {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -333,10 +388,41 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 
+// ——— Sync oceanConfig → uniforms (called each frame) ———
+function syncUniforms() {
+  const c = oceanConfig;
+
+  oceanUniforms.uWave1.value.set(c.wave1.freq, c.wave1.speed, c.wave1.amp);
+  oceanUniforms.uWave2.value.set(c.wave2.freq, c.wave2.speed, c.wave2.amp);
+  oceanUniforms.uWave3.value.set(c.wave3.freq, c.wave3.speed, c.wave3.amp);
+  oceanUniforms.uWave4.value.set(c.wave4.freq, c.wave4.speed, c.wave4.amp);
+
+  oceanUniforms.uDeepColor.value.set(c.deepColor);
+  oceanUniforms.uMidColor.value.set(c.midColor);
+  oceanUniforms.uLightColor.value.set(c.lightColor);
+  oceanUniforms.uFoamColor.value.set(c.foamColor);
+
+  oceanUniforms.uToonSteps.value     = c.toonSteps;
+  oceanUniforms.uSpecPower.value     = c.specPower;
+  oceanUniforms.uSpecThreshold.value = c.specThreshold;
+  oceanUniforms.uSpecIntensity.value = c.specIntensity;
+
+  oceanUniforms.uFresnelPower.value     = c.fresnelPower;
+  oceanUniforms.uFresnelIntensity.value = c.fresnelIntensity;
+
+  oceanUniforms.uFoamStart.value = c.foamStart;
+  oceanUniforms.uFoamEnd.value   = c.foamEnd;
+  oceanUniforms.uFoamMax.value   = c.foamMax;
+
+  oceanUniforms.uFogNear.value = c.fogNear;
+  oceanUniforms.uFogFar.value  = c.fogFar;
+}
+
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.1);
   const t = clock.elapsedTime;
 
+  syncUniforms();
   oceanUniforms.uTime.value = t;
   oceanUniforms.uCameraPos.value.copy(camera.position);
 
@@ -389,3 +475,10 @@ renderer.setAnimationLoop(() => {
 
   renderer.render(scene, camera);
 });
+
+// ——— Dev panel (development only) ———
+if (import.meta.env.DEV) {
+  import('./dev-panel.js').then(({ mountDevPanel }) => {
+    mountDevPanel(oceanConfig);
+  });
+}

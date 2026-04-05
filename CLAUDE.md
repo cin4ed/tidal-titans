@@ -9,8 +9,9 @@ This file tells Claude how this repository is structured, what it contains, and 
 A browser demo of a **Wind Waker–style stylized ocean** with a navigable procedural sailboat.
 
 - **Language/UI**: Spanish copy in the HTML; code comments in English.
-- **Entry point**: `src/main.js` (single file, ~390 lines).
+- **Entry point**: `src/main.js` (single file, ~450 lines).
 - **Framework**: [Vite](https://vitejs.dev/) `^6.2.0` + [Three.js](https://threejs.org/) `^0.160.0` (ES modules).
+- **Dev tooling**: [Tweakpane](https://tweakpane.github.io/docs/) v4 (devDependency) — live shader tweaking panel, only active during `npm run dev`.
 - No TypeScript, no component framework, no state manager.
 
 ---
@@ -40,7 +41,9 @@ tidal-titans-2/
 ├── .gitignore          # node_modules, dist, .DS_Store
 │
 ├── src/
-│   └── main.js         # ALL application logic (ocean, boat, camera, input)
+│   ├── main.js         # ALL application logic (ocean, boat, camera, input)
+│   ├── config.js       # Ocean shader defaults — single source of truth (wave params, colors, fog, etc.)
+│   └── dev-panel.js    # Tweakpane dev UI — only imported when import.meta.env.DEV is true
 │
 ├── public/
 │   └── .gitkeep        # Static assets go here; served at / during dev and build
@@ -61,9 +64,27 @@ tidal-titans-2/
 
 ---
 
+## src/config.js
+
+Single default-export object (`oceanConfig`) that is the **source of truth** for all tweakable ocean shader values:
+
+| Group | Keys |
+| ----- | ---- |
+| Wave layers | `wave1`–`wave4` — each `{ freq, speed, amp }` |
+| Colors | `deepColor`, `midColor`, `lightColor`, `foamColor` (hex strings) |
+| Toon shading | `toonSteps` |
+| Specular | `specPower`, `specThreshold`, `specIntensity` |
+| Fresnel | `fresnelPower`, `fresnelIntensity` |
+| Foam | `foamStart`, `foamEnd`, `foamMax` |
+| Fog | `fogNear`, `fogFar` |
+
+To permanently save a tuned configuration: open the Tweakpane panel in dev mode, click **"Export Config"**, then paste the clipboard contents into `src/config.js`.
+
+---
+
 ## src/main.js architecture
 
-Everything lives in one file. The sections in order:
+Sections in order:
 
 ### 1. Wave math (CPU side)
 
@@ -72,7 +93,9 @@ waveHeight(x, z, time)  — layered sine waves, returns Y displacement
 waveNormal(x, z, time)  — finite-difference gradient of waveHeight
 ```
 
-**Critical**: the exact same formula must exist in the GLSL vertex shader. If you change the wave parameters in JS, update the shader too (and vice versa).
+Both functions read their parameters from `oceanConfig` (imported from `config.js`).
+
+**Critical**: the exact same formula must exist in the GLSL vertex shader. Wave parameters flow JS → GLSL via uniforms (`uWave1`–`uWave4`, each a `vec3` of `freq/speed/amp`) synced every frame by `syncUniforms()`. Never change wave math in one place without updating the other.
 
 ### 2. Scene setup
 
@@ -85,9 +108,9 @@ waveNormal(x, z, time)  — finite-difference gradient of waveHeight
 ### 3. Ocean ShaderMaterial
 
 - Geometry: `PlaneGeometry(220, 220, 160, 160)` rotated –90° on X
-- **Vertex shader**: displaces vertices in world space using `waveHeight`, computes per-vertex normal via finite differences
-- **Fragment shader**: toon color bands from wave height, cel-stepped N·L lighting, Fresnel edge highlight, foam at crests, manual distance fog matching `scene.fog`
-- Uniforms updated every frame: `uTime`, `uCameraPos`, (fog is baked into uniforms not `THREE.Fog`)
+- **Vertex shader**: displaces vertices in world space using `waveHeight`, computes per-vertex normal via finite differences; wave layer params passed as `uWave1`–`uWave4` (`vec3` — freq/speed/amp)
+- **Fragment shader**: all color, toon, specular, Fresnel, foam, and fog values are uniforms (not hardcoded); see `oceanUniforms` in `main.js` for the full list
+- `syncUniforms()` is called at the top of every frame to copy `oceanConfig` → shader uniforms; `uTime` and `uCameraPos` are updated separately after
 
 ### 4. Boat (procedural)
 
@@ -120,11 +143,26 @@ camOrbit = { yaw, pitch, distance: 12, sensitivity: 0.0022, pitchMin, pitchMax }
 
 `renderer.setAnimationLoop(...)` runs each frame:
 
-1. Update ocean uniforms
-2. Accelerate/brake/drag `speed`; rotate `boat.rotation.y` on A/D
-3. Move boat along `boatForward` vector
-4. Sample `waveHeight` for boat Y; `waveNormal` for pitch/roll lean
-5. Place camera on orbit sphere around boat anchor; `lookAt`
+1. `syncUniforms()` — copy `oceanConfig` into all shader uniforms
+2. Update `uTime` and `uCameraPos`
+3. Accelerate/brake/drag `speed`; rotate `boat.rotation.y` on A/D
+4. Move boat along `boatForward` vector
+5. Sample `waveHeight` for boat Y; `waveNormal` for pitch/roll lean
+6. Place camera on orbit sphere around boat anchor; `lookAt`
+
+### 8. Dev panel (conditional)
+
+At the very end of `main.js`:
+
+```js
+if (import.meta.env.DEV) {
+  import('./dev-panel.js').then(({ mountDevPanel }) => {
+    mountDevPanel(oceanConfig);
+  });
+}
+```
+
+`import.meta.env.DEV` is `true` only during `npm run dev`. Vite tree-shakes the entire dynamic import — including Tweakpane — out of production builds.
 
 ---
 
@@ -149,11 +187,12 @@ Skills are mirrored under both `.agents/skills/` and `.claude/skills/`. If you u
 
 ## Key constraints and gotchas
 
-1. **Wave math must stay in sync** — JS `waveHeight` and the GLSL `waveHeight` function use identical parameters. Diverging them breaks the boat bobbing.
-2. **Camera yaw is world-absolute** — do not make yaw relative to `boat.rotation.y` or the camera will spin when the boat turns.
-3. **Pitch sign** — `camOrbit.pitch += e.movementY * sensitivity` (positive, not negative). Inverting breaks natural look-up/down feel.
-4. **Ocean fog is manual** — `scene.fog` is set for other objects, but the ShaderMaterial handles its own fog via `uFogColor/Near/Far` uniforms. Keep both consistent.
-5. **No per-frame allocation** — vectors (`boatForward`, `camTarget`, `camDesired`, `rightVec`, `worldUp`) are declared once outside the loop and reused.
-6. **Single-file convention** — the user prefers all application logic in `src/main.js`. Do not split into multiple modules without being asked.
-7. `**dist/` may be committed** — the `.gitignore` lists `dist` but some build artifacts appear tracked. Don't delete `dist/` without checking `git status`.
+1. **Wave math must stay in sync** — JS `waveHeight` reads from `oceanConfig`; GLSL `waveHeight` reads from `uWave1`–`uWave4` uniforms synced via `syncUniforms()`. The formula is identical in both. Changing wave math in one place without updating the other breaks boat bobbing.
+2. **`config.js` is the only place to change defaults** — never hardcode wave/color/fog values in `main.js`; put them in `config.js` and let the uniforms pick them up.
+3. **Camera yaw is world-absolute** — do not make yaw relative to `boat.rotation.y` or the camera will spin when the boat turns.
+4. **Pitch sign** — `camOrbit.pitch += e.movementY * sensitivity` (positive, not negative). Inverting breaks natural look-up/down feel.
+5. **Ocean fog is manual** — `scene.fog` is set for other objects, but the ShaderMaterial handles its own fog via `uFogColor/Near/Far` uniforms. Keep both consistent.
+6. **No per-frame allocation** — vectors (`boatForward`, `camTarget`, `camDesired`, `rightVec`, `worldUp`) are declared once outside the loop and reused.
+7. **Tweakpane is dev-only** — `dev-panel.js` is never imported in production. Do not add Tweakpane imports anywhere in `main.js` or `config.js`.
+8. **`dist/` may be committed** — the `.gitignore` lists `dist` but some build artifacts appear tracked. Don't delete `dist/` without checking `git status`.
 
