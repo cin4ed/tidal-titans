@@ -263,11 +263,7 @@ async function init() {
   document.addEventListener('pointerlockchange', () => {
     pointerLocked = document.pointerLockElement === renderer.domElement;
     const hint = document.getElementById('hint');
-    if (hint) {
-      hint.textContent = pointerLocked
-        ? 'WASD — Navegar · Mouse — Girar cámara · ESC — Liberar cursor'
-        : 'Click para capturar cursor · WASD — Navegar el barco';
-    }
+    if (hint) hint.classList.toggle('is-locked', pointerLocked);
   });
 
   document.addEventListener('mousemove', (e) => {

@@ -132,7 +132,7 @@ These read **`config.waves.wave1`–`wave4`**, **`config.waves.spatialScale`**, 
 - **WASD** in a `keys` map (`keydown` / `keyup`).
 - **Pointer lock** on canvas click; `mousemove` updates **`camOrbit.yaw`** / **`pitch`** when locked.
 - **Scroll wheel** on the canvas (non-passive): stepped zoom on **`camOrbit.distance`** using **`config.camera`** (`distanceStep`, min/max); distance is clamped each frame so live Tweakpane edits apply.
-- Hint text in `#hint` switches between Spanish strings for locked vs unlocked.
+- **`#hint`** in **`index.html`**: fixed left column with illustrated control rows (inline SVGs); **`main.js`** toggles **`is-locked`** on pointer lock to swap the primary row (click to capture vs ESC to release) and the mouse subtext. Spanish copy.
 
 ### 7. Orbit camera
 

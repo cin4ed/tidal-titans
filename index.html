@@ -9,14 +9,134 @@
     html, body { overflow: hidden; height: 100%; background: #6eb8ff; font-family: system-ui, sans-serif; }
     canvas { display: block; width: 100%; height: 100%; }
     #hint {
-      position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
-      color: #fff; text-shadow: 0 1px 4px rgba(0,0,0,0.5); font-size: 14px; pointer-events: none;
-      background: rgba(0,40,80,0.45); padding: 8px 16px; border-radius: 8px;
+      position: fixed;
+      left: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      max-width: min(280px, calc(100vw - 32px));
+      color: #fff;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+      font-size: 13px;
+      line-height: 1.35;
+      pointer-events: none;
+      background: rgba(0,40,80,0.5);
+      padding: 12px 14px;
+      border-radius: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
     }
+    .hint-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .hint-row .hint-icon {
+      flex-shrink: 0;
+      width: 28px;
+      height: 28px;
+      color: #fff;
+    }
+    .hint-row .hint-icon svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    .hint-label {
+      padding-top: 2px;
+    }
+    .hint-label strong {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+    .hint-label small {
+      display: block;
+      font-size: 11px;
+      opacity: 0.88;
+      font-weight: 400;
+    }
+    .hint-label-stack { flex: 1; min-width: 0; }
+    #hint.is-locked .hint-only-unlocked { display: none; }
+    #hint:not(.is-locked) .hint-only-locked { display: none; }
+    #hint.is-locked .hint-mouse-unlocked { display: none; }
+    #hint:not(.is-locked) .hint-mouse-locked { display: none; }
   </style>
 </head>
 <body>
-  <div id="hint">Click para capturar cursor · WASD — Navegar el barco</div>
+  <div id="hint" class="controls-hint" role="status" aria-live="polite" aria-atomic="true">
+    <div class="hint-row hint-only-unlocked">
+      <div class="hint-icon" aria-hidden="true">
+        <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M8 6l4 14 3-6 6 2L8 6z" fill="currentColor" fill-opacity="0.25" stroke="currentColor"/>
+          <circle cx="22" cy="20" r="5" stroke-dasharray="2 2" opacity="0.9"/>
+        </svg>
+      </div>
+      <div class="hint-label">
+        <strong>Capturar cursor</strong>
+        <small>Haz clic en el lienzo para mirar alrededor con el ratón.</small>
+      </div>
+    </div>
+    <div class="hint-row hint-only-locked">
+      <div class="hint-icon" aria-hidden="true">
+        <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+          <rect x="4" y="9" width="24" height="16" rx="2" fill="currentColor" fill-opacity="0.15"/>
+          <path d="M9 16h4M15 16h8M9 20h14" stroke-width="1.25"/>
+        </svg>
+      </div>
+      <div class="hint-label">
+        <strong>Liberar cursor</strong>
+        <small>Pulsa ESC para volver al modo normal.</small>
+      </div>
+    </div>
+    <div class="hint-row">
+      <div class="hint-icon" aria-hidden="true">
+        <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round">
+          <rect x="13" y="5" width="6" height="6" rx="1" fill="currentColor" fill-opacity="0.35"/>
+          <rect x="6" y="13" width="6" height="6" rx="1" fill="currentColor" fill-opacity="0.35"/>
+          <rect x="13" y="13" width="6" height="6" rx="1" fill="currentColor" fill-opacity="0.22"/>
+          <rect x="20" y="13" width="6" height="6" rx="1" fill="currentColor" fill-opacity="0.35"/>
+        </svg>
+      </div>
+      <div class="hint-label">
+        <strong>WASD</strong>
+        <small>Navegar el barco.</small>
+      </div>
+    </div>
+    <div class="hint-row">
+      <div class="hint-icon" aria-hidden="true">
+        <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+          <path d="M16 5c-3 0-5.5 2.2-5.5 6v6c0 1.5 1 2.5 2.5 2.5h6c1.5 0 2.5-1 2.5-2.5v-6c0-3.8-2.5-6-5.5-6z" fill="currentColor" fill-opacity="0.12"/>
+          <path d="M13 11h6"/>
+          <path d="M10 12l-2-2M22 12l2-2M10 18l-2 2M22 18l2 2M16 3v2M16 25v2"/>
+        </svg>
+      </div>
+      <div class="hint-label-stack">
+        <div class="hint-label hint-mouse-unlocked">
+          <strong>Ratón</strong>
+          <small>Mirar alrededor (solo con el cursor capturado).</small>
+        </div>
+        <div class="hint-label hint-mouse-locked">
+          <strong>Ratón</strong>
+          <small>Girar la cámara.</small>
+        </div>
+      </div>
+    </div>
+    <div class="hint-row">
+      <div class="hint-icon" aria-hidden="true">
+        <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+          <path d="M16 5c-3 0-5.5 2.2-5.5 6v7c0 1.5 1 2.5 2.5 2.5h6c1.5 0 2.5-1 2.5-2.5v-7c0-3.8-2.5-6-5.5-6z" fill="currentColor" fill-opacity="0.12"/>
+          <path d="M14 10h4"/>
+          <path d="M16 8v6"/>
+          <path d="M13 17l-2 4M19 17l2 4"/>
+        </svg>
+      </div>
+      <div class="hint-label">
+        <strong>Rueda del ratón</strong>
+        <small>Acercar o alejar la cámara (zoom).</small>
+      </div>
+    </div>
+  </div>
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>
