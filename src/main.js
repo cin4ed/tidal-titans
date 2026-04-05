@@ -258,6 +258,7 @@ const boat = createBoat();
 boat.position.set(0, 0.5, 0);
 scene.add(boat);
 
+// ——— Input ———
 const keys = { w: false, a: false, s: false, d: false };
 window.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase();
@@ -268,17 +269,60 @@ window.addEventListener('keyup', (e) => {
   if (k in keys) keys[k] = false;
 });
 
+// ——— Boat physics state ———
 let speed = 0;
 const maxSpeed = 14;
 const accel = 10;
 const drag = 2.2;
 const turnSpeed = 2.4;
 
+// ——— Camera orbit state ———
+// yaw = horizontal orbit angle around the boat (relative to boat facing direction)
+// pitch = vertical angle from horizon
+const camOrbit = {
+  yaw: Math.PI,      // start behind the boat (180° = behind in world space)
+  pitch: 0.42,       // ~24° down — comfortable over-the-shoulder view
+  distance: 12,
+  sensitivity: 0.0022,
+  pitchMin: 0.05,    // almost horizontal
+  pitchMax: Math.PI / 2 - 0.05, // almost straight down
+};
+
+// ——— Pointer Lock ———
+let pointerLocked = false;
+
+renderer.domElement.addEventListener('click', () => {
+  if (!pointerLocked) {
+    renderer.domElement.requestPointerLock();
+  }
+});
+
+document.addEventListener('pointerlockchange', () => {
+  pointerLocked = document.pointerLockElement === renderer.domElement;
+  const hint = document.getElementById('hint');
+  if (hint) {
+    hint.textContent = pointerLocked
+      ? 'WASD — Navegar · Mouse — Girar cámara · ESC — Liberar cursor'
+      : 'Click para capturar cursor · WASD — Navegar el barco';
+  }
+});
+
+document.addEventListener('mousemove', (e) => {
+  if (!pointerLocked) return;
+  camOrbit.yaw -= e.movementX * camOrbit.sensitivity;
+  camOrbit.pitch += e.movementY * camOrbit.sensitivity;
+  camOrbit.pitch = THREE.MathUtils.clamp(
+    camOrbit.pitch,
+    camOrbit.pitchMin,
+    camOrbit.pitchMax
+  );
+});
+
+// ——— Reusable vectors ———
 const clock = new THREE.Clock();
 const boatForward = new THREE.Vector3(0, 0, 1);
 const camTarget = new THREE.Vector3();
 const camDesired = new THREE.Vector3();
-const camBack = new THREE.Vector3();
 const worldUp = new THREE.Vector3(0, 1, 0);
 const rightVec = new THREE.Vector3();
 
@@ -296,6 +340,7 @@ renderer.setAnimationLoop(() => {
   oceanUniforms.uTime.value = t;
   oceanUniforms.uCameraPos.value.copy(camera.position);
 
+  // ——— Boat movement ———
   if (keys.w) speed += accel * dt;
   if (keys.s) speed -= accel * dt * 0.7;
   speed *= Math.exp(-drag * dt);
@@ -315,17 +360,31 @@ renderer.setAnimationLoop(() => {
 
   const n = waveNormal(wx, wz, t);
   rightVec.crossVectors(boatForward, worldUp).normalize();
-  const pitch = Math.asin(THREE.MathUtils.clamp(-n.dot(boatForward), -0.35, 0.35));
-  const roll = Math.asin(THREE.MathUtils.clamp(n.dot(rightVec), -0.4, 0.4));
-  boat.rotation.x = THREE.MathUtils.lerp(boat.rotation.x, pitch, 0.12);
-  boat.rotation.z = THREE.MathUtils.lerp(boat.rotation.z, roll, 0.12);
+  const boatPitch = Math.asin(THREE.MathUtils.clamp(-n.dot(boatForward), -0.35, 0.35));
+  const boatRoll = Math.asin(THREE.MathUtils.clamp(n.dot(rightVec), -0.4, 0.4));
+  boat.rotation.x = THREE.MathUtils.lerp(boat.rotation.x, boatPitch, 0.12);
+  boat.rotation.z = THREE.MathUtils.lerp(boat.rotation.z, boatRoll, 0.12);
 
-  camBack.copy(boatForward).multiplyScalar(-12);
-  camDesired.copy(boat.position).add(camBack);
-  camDesired.y = boat.position.y + 7;
-  camera.position.lerp(camDesired, 0.08);
+  // ——— Orbit camera around boat ———
+  // Convert spherical (yaw, pitch) to world offset.
+  // yaw is absolute world angle so the camera doesn't spin when the boat turns.
+  const sinYaw = Math.sin(camOrbit.yaw);
+  const cosYaw = Math.cos(camOrbit.yaw);
+  const sinPitch = Math.sin(camOrbit.pitch);
+  const cosPitch = Math.cos(camOrbit.pitch);
+
+  // Orbit anchor: slightly above deck
   camTarget.copy(boat.position);
-  camTarget.y = boat.position.y + 1.2;
+  camTarget.y += 1.5;
+
+  // Camera position on sphere around anchor
+  camDesired.set(
+    camTarget.x + camOrbit.distance * cosPitch * sinYaw,
+    camTarget.y + camOrbit.distance * sinPitch,
+    camTarget.z + camOrbit.distance * cosPitch * cosYaw
+  );
+
+  camera.position.lerp(camDesired, 0.1);
   camera.lookAt(camTarget);
 
   renderer.render(scene, camera);
