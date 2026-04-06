@@ -228,13 +228,6 @@ async function init() {
   boat.position.set(0, 0.5, 0);
   scene.add(boat);
 
-  // Approximate ship "longitude" (bow→stern) from its largest horizontal extent.
-  // Used as the world-space width of the trajectory ribbon.
-  const boatBounds = new THREE.Box3().setFromObject(boat);
-  const boatSize = new THREE.Vector3();
-  boatBounds.getSize(boatSize);
-  const boatLongitude = Math.max(boatSize.x, boatSize.z);
-
   // ——— Input ———
   const keys = { w: false, a: false, s: false, d: false };
   window.addEventListener('keydown', (e) => {
@@ -552,7 +545,7 @@ async function init() {
     }
 
     const centerVertCount = w / 3;
-    const ribbonHalfWidth = boatLongitude * 0.5;
+    const ribbonHalfWidth = Math.max(0.01, config.combat.trajectoryRibbonWidth ?? 10) * 0.5;
 
     // Expand centerline into a camera-facing ribbon.
     for (let i = 0; i < centerVertCount; i++) {

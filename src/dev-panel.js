@@ -266,6 +266,12 @@ export function mountDevPanel(config, options = {}) {
     max: 45,
     step: 0.5,
   }, 'Initial elevation angle of the shot above the horizon. Affects both the cannonballs and the trajectory preview.');
+  bindWithHint(combatFolder, cb, 'trajectoryRibbonWidth', {
+    label: 'Ribbon width',
+    min: 0.5,
+    max: 40,
+    step: 0.5,
+  }, 'World-space width of the trajectory preview ribbon.');
   bindWithHint(combatFolder, cb, 'gravity', {
     label: 'Ball gravity',
     min: 0,
