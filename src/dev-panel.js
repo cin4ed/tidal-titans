@@ -58,6 +58,8 @@ const config = {
 
   combat: {
     muzzleSpeed: ${n(cbt.muzzleSpeed, 2)},
+    launchAngleDeg: ${n(cbt.launchAngleDeg ?? 0, 2)},
+    trajectoryRibbonWidth: ${n(cbt.trajectoryRibbonWidth ?? 10, 2)},
     gravity: ${n(cbt.gravity, 2)},
     volleyStagger: ${n(cbt.volleyStagger, 4)},
     cooldown: ${n(cbt.cooldown, 3)},

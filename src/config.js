@@ -48,7 +48,7 @@ const config = {
   combat: {
     muzzleSpeed: 45,
     launchAngleDeg: 18,
-    trajectoryRibbonWidth: 10,
+    trajectoryRibbonWidth: 3.5,
     gravity: 15,
     volleyStagger: 0.07,
     cooldown: 0.65,
@@ -58,7 +58,7 @@ const config = {
     rangeAtMinPower: 70,
     rangeAtMaxPower: 220,
     trajectoryPreviewMuzzleIndex: 1,
-    trajectorySampleDt: 1 / 60,
+    trajectorySampleDt: 0.01667,
     trajectoryMaxSteps: 420,
   },
 };
