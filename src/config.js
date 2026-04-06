@@ -47,6 +47,7 @@ const config = {
 
   combat: {
     muzzleSpeed: 45,
+    launchAngleDeg: 18,
     gravity: 15,
     volleyStagger: 0.07,
     cooldown: 0.65,

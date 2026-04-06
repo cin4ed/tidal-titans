@@ -260,6 +260,12 @@ export function mountDevPanel(config, options = {}) {
     max: 120,
     step: 1,
   }, 'Base speed along the port broadside (horizontal). Multiplied by charge power; boat forward speed is added to the shot.');
+  bindWithHint(combatFolder, cb, 'launchAngleDeg', {
+    label: 'Launch angle (°)',
+    min: -5,
+    max: 45,
+    step: 0.5,
+  }, 'Initial elevation angle of the shot above the horizon. Affects both the cannonballs and the trajectory preview.');
   bindWithHint(combatFolder, cb, 'gravity', {
     label: 'Ball gravity',
     min: 0,

@@ -311,6 +311,7 @@ async function init() {
   const portBroadsideDir = new THREE.Vector3();
   const boatVelAtFire = new THREE.Vector3();
   const cannonSpawnVel = new THREE.Vector3();
+  const cannonHorizVel = new THREE.Vector3();
   const trajP = new THREE.Vector3();
   const trajV = new THREE.Vector3();
   const trajTangent = new THREE.Vector3();
@@ -458,10 +459,12 @@ async function init() {
   function spawnCannonProjectile(muzzleIndex, powerScale) {
     if (!prepareCannonMuzzle(muzzleIndex)) return;
 
-    cannonSpawnVel
-      .copy(portBroadsideDir)
-      .multiplyScalar(config.combat.muzzleSpeed * powerScale)
-      .add(boatVelAtFire);
+    const launchAngleRad = THREE.MathUtils.degToRad(config.combat.launchAngleDeg ?? 0);
+    const muzzleV = config.combat.muzzleSpeed * powerScale;
+    const cosA = Math.cos(launchAngleRad);
+    const sinA = Math.sin(launchAngleRad);
+    cannonHorizVel.copy(portBroadsideDir).multiplyScalar(muzzleV * cosA);
+    cannonSpawnVel.copy(cannonHorizVel).addScaledVector(worldUp, muzzleV * sinA).add(boatVelAtFire);
 
     const mesh = new THREE.Mesh(cannonBallGeo, cannonBallMat);
     mesh.position.copy(muzzleWorld);
@@ -508,10 +511,11 @@ async function init() {
 
     const spawnX = muzzleWorld.x;
     const spawnZ = muzzleWorld.z;
-    trajV
-      .copy(portBroadsideDir)
-      .multiplyScalar(config.combat.muzzleSpeed * powerScale)
-      .add(boatVelAtFire);
+    const launchAngleRad = THREE.MathUtils.degToRad(config.combat.launchAngleDeg ?? 0);
+    const muzzleV = config.combat.muzzleSpeed * powerScale;
+    const cosA = Math.cos(launchAngleRad);
+    const sinA = Math.sin(launchAngleRad);
+    trajV.copy(portBroadsideDir).multiplyScalar(muzzleV * cosA).addScaledVector(worldUp, muzzleV * sinA).add(boatVelAtFire);
     trajP.copy(muzzleWorld);
 
     let w = 0;
