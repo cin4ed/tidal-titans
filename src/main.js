@@ -396,7 +396,7 @@ async function init() {
     portBroadsideDir.set(-rightVec.x, 0, -rightVec.z);
     if (portBroadsideDir.lengthSq() < 1e-8) portBroadsideDir.set(-1, 0, 0);
     portBroadsideDir.normalize();
-    muzzleWorld.addScaledVector(portBroadsideDir, 0.06);
+    muzzleWorld.addScaledVector(portBroadsideDir, 3);
     boatVelAtFire.copy(boatForward).multiplyScalar(speed);
     return true;
   }
