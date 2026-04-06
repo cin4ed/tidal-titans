@@ -228,6 +228,13 @@ async function init() {
   boat.position.set(0, 0.5, 0);
   scene.add(boat);
 
+  // Approximate ship "longitude" (bow→stern) from its largest horizontal extent.
+  // Used as the world-space width of the trajectory ribbon.
+  const boatBounds = new THREE.Box3().setFromObject(boat);
+  const boatSize = new THREE.Vector3();
+  boatBounds.getSize(boatSize);
+  const boatLongitude = Math.max(boatSize.x, boatSize.z);
+
   // ——— Input ———
   const keys = { w: false, a: false, s: false, d: false };
   window.addEventListener('keydown', (e) => {
@@ -306,22 +313,57 @@ async function init() {
   const cannonSpawnVel = new THREE.Vector3();
   const trajP = new THREE.Vector3();
   const trajV = new THREE.Vector3();
+  const trajTangent = new THREE.Vector3();
+  const trajCamDir = new THREE.Vector3();
+  const trajWidthDir = new THREE.Vector3();
+  const trajLeft = new THREE.Vector3();
+  const trajRight = new THREE.Vector3();
 
-  const trajVertCount = CANNON_TRAJ_BUFFER_STEPS + 2;
-  const trajPosArr = new Float32Array(trajVertCount * 3);
-  const trajGeom = new THREE.BufferGeometry();
-  trajGeom.setAttribute('position', new THREE.BufferAttribute(trajPosArr, 3));
-  trajGeom.setDrawRange(0, 0);
-  const trajMat = new THREE.LineBasicMaterial({
-    color: 0xffcc66,
+  // Trajectory preview ribbon (replaces the thin line).
+  // We keep a centerline buffer for sampling, then expand into a billboarded ribbon strip.
+  const trajCenterVertCount = CANNON_TRAJ_BUFFER_STEPS + 2;
+  const trajCenterPosArr = new Float32Array(trajCenterVertCount * 3);
+
+  const trajRibbonVertCount = trajCenterVertCount * 2;
+  const trajRibbonPosArr = new Float32Array(trajRibbonVertCount * 3);
+  const trajRibbonGeom = new THREE.BufferGeometry();
+  trajRibbonGeom.setAttribute('position', new THREE.BufferAttribute(trajRibbonPosArr, 3));
+
+  const trajRibbonIndexCount = (trajCenterVertCount - 1) * 6;
+  const trajRibbonIndexArr = new Uint32Array(trajRibbonIndexCount);
+  {
+    let w = 0;
+    for (let i = 0; i < trajCenterVertCount - 1; i++) {
+      const a0 = i * 2;
+      const a1 = i * 2 + 1;
+      const b0 = (i + 1) * 2;
+      const b1 = (i + 1) * 2 + 1;
+      // Two triangles for the quad segment.
+      trajRibbonIndexArr[w++] = a0;
+      trajRibbonIndexArr[w++] = a1;
+      trajRibbonIndexArr[w++] = b0;
+      trajRibbonIndexArr[w++] = a1;
+      trajRibbonIndexArr[w++] = b1;
+      trajRibbonIndexArr[w++] = b0;
+    }
+  }
+  trajRibbonGeom.setIndex(new THREE.BufferAttribute(trajRibbonIndexArr, 1));
+  trajRibbonGeom.setDrawRange(0, 0);
+
+  const trajRibbonMat = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
     transparent: true,
-    opacity: 0.85,
-    depthTest: true,
+    opacity: 0.35,
+    side: THREE.DoubleSide,
+    depthTest: false,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
   });
-  const cannonTrajectoryLine = new THREE.Line(trajGeom, trajMat);
-  cannonTrajectoryLine.visible = false;
-  cannonTrajectoryLine.frustumCulled = false;
-  scene.add(cannonTrajectoryLine);
+  const cannonTrajectoryRibbon = new THREE.Mesh(trajRibbonGeom, trajRibbonMat);
+  cannonTrajectoryRibbon.visible = false;
+  cannonTrajectoryRibbon.frustumCulled = false;
+  cannonTrajectoryRibbon.renderOrder = 10_000;
+  scene.add(cannonTrajectoryRibbon);
 
   function cannonPowerBounds() {
     const c = config.combat;
@@ -444,7 +486,7 @@ async function init() {
       t >= cannonCooldownUntil &&
       document.pointerLockElement === renderer.domElement;
     if (!show) {
-      cannonTrajectoryLine.visible = false;
+      cannonTrajectoryRibbon.visible = false;
       return;
     }
 
@@ -460,7 +502,7 @@ async function init() {
       )
       : 1;
     if (!prepareCannonMuzzle(previewMuzzle)) {
-      cannonTrajectoryLine.visible = false;
+      cannonTrajectoryRibbon.visible = false;
       return;
     }
 
@@ -473,9 +515,9 @@ async function init() {
     trajP.copy(muzzleWorld);
 
     let w = 0;
-    trajPosArr[w++] = trajP.x;
-    trajPosArr[w++] = trajP.y;
-    trajPosArr[w++] = trajP.z;
+    trajCenterPosArr[w++] = trajP.x;
+    trajCenterPosArr[w++] = trajP.y;
+    trajCenterPosArr[w++] = trajP.z;
 
     const previewMaxR = cannonMaxRangeForPower(powerScale);
     const previewMaxSq = previewMaxR * previewMaxR;
@@ -499,16 +541,78 @@ async function init() {
 
       if (trajP.y < waveHeight(trajP.x, trajP.z, t)) break;
 
-      if (w >= trajPosArr.length - 3) break;
-      trajPosArr[w++] = trajP.x;
-      trajPosArr[w++] = trajP.y;
-      trajPosArr[w++] = trajP.z;
+      if (w >= trajCenterPosArr.length - 3) break;
+      trajCenterPosArr[w++] = trajP.x;
+      trajCenterPosArr[w++] = trajP.y;
+      trajCenterPosArr[w++] = trajP.z;
     }
 
-    const vertCount = w / 3;
-    trajGeom.attributes.position.needsUpdate = true;
-    trajGeom.setDrawRange(0, vertCount);
-    cannonTrajectoryLine.visible = vertCount >= 2;
+    const centerVertCount = w / 3;
+    const ribbonHalfWidth = boatLongitude * 0.5;
+
+    // Expand centerline into a camera-facing ribbon.
+    for (let i = 0; i < centerVertCount; i++) {
+      const i3 = i * 3;
+      const px = trajCenterPosArr[i3 + 0];
+      const py = trajCenterPosArr[i3 + 1];
+      const pz = trajCenterPosArr[i3 + 2];
+
+      // Tangent: forward difference at ends, central difference otherwise.
+      if (centerVertCount <= 1) {
+        trajTangent.set(1, 0, 0);
+      } else if (i === 0) {
+        trajTangent.set(
+          trajCenterPosArr[3] - px,
+          trajCenterPosArr[4] - py,
+          trajCenterPosArr[5] - pz,
+        );
+      } else if (i === centerVertCount - 1) {
+        const j3 = (i - 1) * 3;
+        trajTangent.set(
+          px - trajCenterPosArr[j3 + 0],
+          py - trajCenterPosArr[j3 + 1],
+          pz - trajCenterPosArr[j3 + 2],
+        );
+      } else {
+        const j3 = (i - 1) * 3;
+        const k3 = (i + 1) * 3;
+        trajTangent.set(
+          trajCenterPosArr[k3 + 0] - trajCenterPosArr[j3 + 0],
+          trajCenterPosArr[k3 + 1] - trajCenterPosArr[j3 + 1],
+          trajCenterPosArr[k3 + 2] - trajCenterPosArr[j3 + 2],
+        );
+      }
+      if (trajTangent.lengthSq() < 1e-10) trajTangent.set(1, 0, 0);
+      trajTangent.normalize();
+
+      // Ribbon width direction does NOT need to be camera-facing.
+      // Use the ship's bow→stern axis (`boatForward`), orthogonalized against the trajectory tangent
+      // so the ribbon stays "wide" relative to the arc instead of skewing along it.
+      trajWidthDir.copy(boatForward);
+      trajWidthDir.addScaledVector(trajTangent, -trajWidthDir.dot(trajTangent));
+      if (trajWidthDir.lengthSq() < 1e-10) {
+        // Fallback if tangent is nearly aligned with boatForward.
+        trajWidthDir.crossVectors(trajTangent, worldUp);
+      }
+      if (trajWidthDir.lengthSq() < 1e-10) trajWidthDir.set(1, 0, 0);
+      trajWidthDir.normalize();
+
+      trajLeft.set(px, py, pz).addScaledVector(trajWidthDir, ribbonHalfWidth);
+      trajRight.set(px, py, pz).addScaledVector(trajWidthDir, -ribbonHalfWidth);
+
+      const vL3 = (i * 2 + 0) * 3;
+      const vR3 = (i * 2 + 1) * 3;
+      trajRibbonPosArr[vL3 + 0] = trajLeft.x;
+      trajRibbonPosArr[vL3 + 1] = trajLeft.y;
+      trajRibbonPosArr[vL3 + 2] = trajLeft.z;
+      trajRibbonPosArr[vR3 + 0] = trajRight.x;
+      trajRibbonPosArr[vR3 + 1] = trajRight.y;
+      trajRibbonPosArr[vR3 + 2] = trajRight.z;
+    }
+
+    trajRibbonGeom.attributes.position.needsUpdate = true;
+    trajRibbonGeom.setDrawRange(0, Math.max(0, (centerVertCount - 1) * 6));
+    cannonTrajectoryRibbon.visible = centerVertCount >= 2;
   }
 
   // ——— Post-processing pipeline ———
