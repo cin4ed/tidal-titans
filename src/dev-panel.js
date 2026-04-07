@@ -8,6 +8,7 @@ function serializeConfig(config) {
   const fog = config.fog;
   const sky = config.sky;
   const cam = config.camera;
+  const boat = config.boat;
   const cbt = config.combat;
   return `// Scene / render tuning — single source of truth.
 // Tweak values in the dev panel (npm run dev), then click "Export Config"
@@ -17,10 +18,10 @@ const config = {
   waves: {
     spatialScale: ${n(w.spatialScale)},
     ampScale: ${n(w.ampScale)},
-    wave1: { freq: ${n(w.wave1.freq)}, speed: ${n(w.wave1.speed)}, amp: ${n(w.wave1.amp)} },
-    wave2: { freq: ${n(w.wave2.freq)}, speed: ${n(w.wave2.speed)}, amp: ${n(w.wave2.amp)} },
-    wave3: { freq: ${n(w.wave3.freq)}, speed: ${n(w.wave3.speed)}, amp: ${n(w.wave3.amp)} },
-    wave4: { freq: ${n(w.wave4.freq)}, speed: ${n(w.wave4.speed)}, amp: ${n(w.wave4.amp)} },
+    wave1: { dirX: ${n(w.wave1.dirX)}, dirZ: ${n(w.wave1.dirZ)}, wavelength: ${n(w.wave1.wavelength)}, speed: ${n(w.wave1.speed)}, amp: ${n(w.wave1.amp)}, steepness: ${n(w.wave1.steepness)} },
+    wave2: { dirX: ${n(w.wave2.dirX)}, dirZ: ${n(w.wave2.dirZ)}, wavelength: ${n(w.wave2.wavelength)}, speed: ${n(w.wave2.speed)}, amp: ${n(w.wave2.amp)}, steepness: ${n(w.wave2.steepness)} },
+    wave3: { dirX: ${n(w.wave3.dirX)}, dirZ: ${n(w.wave3.dirZ)}, wavelength: ${n(w.wave3.wavelength)}, speed: ${n(w.wave3.speed)}, amp: ${n(w.wave3.amp)}, steepness: ${n(w.wave3.steepness)} },
+    wave4: { dirX: ${n(w.wave4.dirX)}, dirZ: ${n(w.wave4.dirZ)}, wavelength: ${n(w.wave4.wavelength)}, speed: ${n(w.wave4.speed)}, amp: ${n(w.wave4.amp)}, steepness: ${n(w.wave4.steepness)} },
   },
 
   water: {
@@ -56,6 +57,13 @@ const config = {
     distanceStep: ${n(cam.distanceStep, 2)},
   },
 
+  boat: {
+    maxSpeed: ${n(boat.maxSpeed, 2)},
+    accel: ${n(boat.accel, 2)},
+    drag: ${n(boat.drag, 2)},
+    turnSpeed: ${n(boat.turnSpeed, 2)},
+  },
+
   combat: {
     muzzleSpeed: ${n(cbt.muzzleSpeed, 2)},
     launchAngleDeg: ${n(cbt.launchAngleDeg ?? 0, 2)},
@@ -69,6 +77,7 @@ const config = {
     rangeAtMinPower: ${n(cbt.rangeAtMinPower, 1)},
     rangeAtMaxPower: ${n(cbt.rangeAtMaxPower, 1)},
     trajectoryPreviewMuzzleIndex: ${Math.round(cbt.trajectoryPreviewMuzzleIndex)},
+    trajectoryPreviewStarboardMuzzleIndex: ${Math.round(cbt.trajectoryPreviewStarboardMuzzleIndex ?? cbt.trajectoryPreviewMuzzleIndex)},
     trajectorySampleDt: ${n(cbt.trajectorySampleDt, 5)},
     trajectoryMaxSteps: ${Math.round(cbt.trajectoryMaxSteps)},
   },
@@ -87,7 +96,7 @@ export function mountDevPanel(config, options = {}) {
   wavesFolder.addBinding(config.waves, 'spatialScale', {
     label: 'Spatial scale',
     min: 0.25,
-    max: 8,
+    max: 80,
     step: 0.05,
   });
   wavesFolder.addBinding(config.waves, 'ampScale', {
@@ -99,9 +108,12 @@ export function mountDevPanel(config, options = {}) {
   [1, 2, 3, 4].forEach((i) => {
     const key = `wave${i}`;
     const wf = wavesFolder.addFolder({ title: `Layer ${i}`, expanded: false });
-    wf.addBinding(config.waves[key], 'freq',  { label: 'freq',  min: 0.0, max: 3.0, step: 0.01 });
+    wf.addBinding(config.waves[key], 'dirX', { label: 'dirX', min: -1.0, max: 1.0, step: 0.01 });
+    wf.addBinding(config.waves[key], 'dirZ', { label: 'dirZ', min: -1.0, max: 1.0, step: 0.01 });
+    wf.addBinding(config.waves[key], 'wavelength', { label: 'λ', min: 0.25, max: 12.0, step: 0.05 });
     wf.addBinding(config.waves[key], 'speed', { label: 'speed', min: 0.0, max: 5.0, step: 0.01 });
-    wf.addBinding(config.waves[key], 'amp',   { label: 'amp',   min: 0.0, max: 2.0, step: 0.01 });
+    wf.addBinding(config.waves[key], 'amp', { label: 'amp', min: 0.0, max: 2.0, step: 0.01 });
+    wf.addBinding(config.waves[key], 'steepness', { label: 'steep', min: 0.0, max: 0.98, step: 0.01 });
   });
 
   // ——— Water appearance ———
@@ -252,6 +264,34 @@ export function mountDevPanel(config, options = {}) {
     bindRowHoverHint(api.element, hint);
     return api;
   }
+
+  // ——— Boat movement (WASD) ———
+  const boatFolder = pane.addFolder({ title: 'Boat Movement', expanded: false });
+  const bm = config.boat;
+  bindWithHint(boatFolder, bm, 'maxSpeed', {
+    label: 'Max speed',
+    min: 2,
+    max: 40,
+    step: 0.5,
+  }, 'Forward speed cap (W). Reverse is 35% of this (S).');
+  bindWithHint(boatFolder, bm, 'accel', {
+    label: 'Acceleration',
+    min: 1,
+    max: 40,
+    step: 0.5,
+  }, 'How quickly W/S change forward speed each second.');
+  bindWithHint(boatFolder, bm, 'drag', {
+    label: 'Drag',
+    min: 0.1,
+    max: 10,
+    step: 0.1,
+  }, 'Exponential slowdown when not accelerating (higher = ship stops faster).');
+  bindWithHint(boatFolder, bm, 'turnSpeed', {
+    label: 'Turn speed',
+    min: 0.5,
+    max: 8,
+    step: 0.05,
+  }, 'Yaw rate in rad/s for A/D; sign flips when moving astern.');
 
   // ——— Combat / cannons ———
   const combatFolder = pane.addFolder({ title: 'Combat / Cannons', expanded: false });

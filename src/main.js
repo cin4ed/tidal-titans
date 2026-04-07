@@ -14,6 +14,7 @@ import {
   mx_worley_noise_float,
   positionLocal,
   positionWorld,
+  cos,
   sin,
   time,
   uniform,
@@ -23,6 +24,8 @@ import { inject } from '@vercel/analytics';
 
 import config from './config.js';
 import { createPirateShip } from './models/pirateShip.js';
+import { createEnemyShip } from './models/enemyShip.js';
+import { createEnemyHealthBar } from './models/enemyHealthBar.js';
 
 // Initialize Vercel Web Analytics
 inject();
@@ -36,21 +39,96 @@ function waveHeight(x, z, t) {
   const ampScale = Math.max(0, config.waves.ampScale);
   const sx = x / s;
   const sz = z / s;
+
+  // Height-only sampling of the full Gerstner surface. We still include the
+  // Gerstner choppiness terms in normals via analytic tangents below.
+  //
+  // Params are per-wave:
+  // - wavelength: in "scaled space" units (i.e. applied to sx/sz)
+  // - speed: angular phase speed (radians/sec)
+  // - amp: base amplitude (scaled by s * ampScale to keep the old global knobs useful)
+  // - steepness: choppiness (Q), clamped for stability
   let h = 0;
-  h += Math.sin(sx * wave1.freq + t * wave1.speed) * (wave1.amp * s * ampScale);
-  h += Math.sin(sz * wave2.freq + t * wave2.speed) * (wave2.amp * s * ampScale);
-  h += Math.sin((sx + sz) * wave3.freq + t * wave3.speed) * (wave3.amp * s * ampScale);
-  h += Math.sin(sx * wave4.freq + sz * 0.8 + t * wave4.speed) * (wave4.amp * s * ampScale);
+  const add = (w) => {
+    const dirLen = Math.hypot(w.dirX, w.dirZ) || 1;
+    const dx = w.dirX / dirLen;
+    const dz = w.dirZ / dirLen;
+    const A = (w.amp ?? 0) * s * ampScale;
+    const k = (Math.PI * 2) / Math.max(0.001, w.wavelength ?? 1);
+    const theta = k * (dx * sx + dz * sz) + (w.speed ?? 0) * t;
+    h += A * Math.sin(theta);
+  };
+
+  add(wave1);
+  add(wave2);
+  add(wave3);
+  add(wave4);
   return h;
 }
 
 function waveNormal(x, z, t, eps = 0.15) {
-  const hx = waveHeight(x + eps, z, t) - waveHeight(x - eps, z, t);
-  const hz = waveHeight(x, z + eps, t) - waveHeight(x, z - eps, t);
-  const nx = -hx / (2 * eps);
-  const nz = -hz / (2 * eps);
-  const len = Math.hypot(nx, 1, nz) || 1;
-  return new THREE.Vector3(nx / len, 1 / len, nz / len);
+  const { wave1, wave2, wave3, wave4 } = config.waves;
+  const s = Math.max(0.01, config.waves.spatialScale);
+  const ampScale = Math.max(0, config.waves.ampScale);
+  const sx = x / s;
+  const sz = z / s;
+
+  // Analytic Gerstner normal via tangents:
+  // P(x,z) = [ x + Σ(Q A d.x cosθ), Σ(A sinθ), z + Σ(Q A d.z cosθ) ]
+  //
+  // Use scaled coordinates (sx, sz) for θ, then apply chain rule for ∂θ/∂x and ∂θ/∂z.
+  // This keeps boat tilt consistent with the visible water mesh.
+  let dPxdx = 1;
+  let dPydx = 0;
+  let dPzdx = 0;
+  let dPxdz = 0;
+  let dPydz = 0;
+  let dPzdz = 1;
+
+  const add = (w) => {
+    const dirLen = Math.hypot(w.dirX, w.dirZ) || 1;
+    const dx = w.dirX / dirLen;
+    const dz = w.dirZ / dirLen;
+
+    const A = (w.amp ?? 0) * s * ampScale;
+    const k = (Math.PI * 2) / Math.max(0.001, w.wavelength ?? 1);
+    const omega = w.speed ?? 0;
+
+    // Clamp choppiness for stability; keep a small safety margin.
+    const Q = THREE.MathUtils.clamp(w.steepness ?? 0, 0, 0.98);
+
+    const theta = k * (dx * sx + dz * sz) + omega * t;
+    const sinT = Math.sin(theta);
+    const cosT = Math.cos(theta);
+
+    const dThetaDx = (k * dx) / s;
+    const dThetaDz = (k * dz) / s;
+
+    // ∂/∂x
+    dPxdx += (-Q * A * dx * sinT) * dThetaDx;
+    dPydx += (A * cosT) * dThetaDx;
+    dPzdx += (-Q * A * dz * sinT) * dThetaDx;
+
+    // ∂/∂z
+    dPxdz += (-Q * A * dx * sinT) * dThetaDz;
+    dPydz += (A * cosT) * dThetaDz;
+    dPzdz += (-Q * A * dz * sinT) * dThetaDz;
+  };
+
+  add(wave1);
+  add(wave2);
+  add(wave3);
+  add(wave4);
+
+  // Tangents
+  const dPdx = new THREE.Vector3(dPxdx, dPydx, dPzdx);
+  const dPdz = new THREE.Vector3(dPxdz, dPydz, dPzdz);
+
+  // Normal = normalize(dPdz × dPdx)
+  const n = new THREE.Vector3().crossVectors(dPdz, dPdx);
+  const len = n.length() || 1;
+  n.multiplyScalar(1 / len);
+  return n;
 }
 
 // ——— Main async init (WebGPU renderer requires await renderer.init()) ———
@@ -138,19 +216,36 @@ async function init() {
   // ——— TSL Water Material ———
   // TSL uniforms — updated every frame from config so dev-panel sliders work live.
 
-  // Wave displacement uniforms (shared formula with JS waveHeight)
-  const uW1Freq  = uniform(config.waves.wave1.freq);
-  const uW1Speed = uniform(config.waves.wave1.speed);
-  const uW1Amp   = uniform(config.waves.wave1.amp);
-  const uW2Freq  = uniform(config.waves.wave2.freq);
-  const uW2Speed = uniform(config.waves.wave2.speed);
-  const uW2Amp   = uniform(config.waves.wave2.amp);
-  const uW3Freq  = uniform(config.waves.wave3.freq);
-  const uW3Speed = uniform(config.waves.wave3.speed);
-  const uW3Amp   = uniform(config.waves.wave3.amp);
-  const uW4Freq  = uniform(config.waves.wave4.freq);
-  const uW4Speed = uniform(config.waves.wave4.speed);
-  const uW4Amp   = uniform(config.waves.wave4.amp);
+  // Gerstner wave displacement uniforms (mirrors CPU waveHeight/waveNormal)
+  // We precompute k = 2π/λ on the CPU and sync it each frame for stability.
+  const uG1DirX = uniform(config.waves.wave1.dirX);
+  const uG1DirZ = uniform(config.waves.wave1.dirZ);
+  const uG1K = uniform((Math.PI * 2) / Math.max(0.001, config.waves.wave1.wavelength));
+  const uG1Speed = uniform(config.waves.wave1.speed);
+  const uG1Amp = uniform(config.waves.wave1.amp);
+  const uG1Steep = uniform(config.waves.wave1.steepness);
+
+  const uG2DirX = uniform(config.waves.wave2.dirX);
+  const uG2DirZ = uniform(config.waves.wave2.dirZ);
+  const uG2K = uniform((Math.PI * 2) / Math.max(0.001, config.waves.wave2.wavelength));
+  const uG2Speed = uniform(config.waves.wave2.speed);
+  const uG2Amp = uniform(config.waves.wave2.amp);
+  const uG2Steep = uniform(config.waves.wave2.steepness);
+
+  const uG3DirX = uniform(config.waves.wave3.dirX);
+  const uG3DirZ = uniform(config.waves.wave3.dirZ);
+  const uG3K = uniform((Math.PI * 2) / Math.max(0.001, config.waves.wave3.wavelength));
+  const uG3Speed = uniform(config.waves.wave3.speed);
+  const uG3Amp = uniform(config.waves.wave3.amp);
+  const uG3Steep = uniform(config.waves.wave3.steepness);
+
+  const uG4DirX = uniform(config.waves.wave4.dirX);
+  const uG4DirZ = uniform(config.waves.wave4.dirZ);
+  const uG4K = uniform((Math.PI * 2) / Math.max(0.001, config.waves.wave4.wavelength));
+  const uG4Speed = uniform(config.waves.wave4.speed);
+  const uG4Amp = uniform(config.waves.wave4.amp);
+  const uG4Steep = uniform(config.waves.wave4.steepness);
+
   const uWaveSpatialScale = uniform(config.waves.spatialScale);
   const uWaveAmpScale = uniform(config.waves.ampScale);
   const uWaveVisualScale = uniform(config.water.waveVisualScale);
@@ -160,20 +255,39 @@ async function init() {
   const uWorleyScale0 = uniform(config.water.worleyScale0);
   const uWorleyScale1 = uniform(config.water.worleyScale1);
 
-  // ——— TSL vertex wave displacement ———
-  // Mirrors JS waveHeight() exactly; positionLocal is object-space (plane lies in XZ).
-  const px = positionLocal.x.div(uWaveSpatialScale);
-  const pz = positionLocal.z.div(uWaveSpatialScale);
+  // ——— TSL vertex Gerstner displacement ———
+  // Mirrors CPU waveHeight/waveNormal parameters. Use world position for phase so
+  // waves are world-locked (CPU sampling uses world x/z).
+  const px = positionWorld.x.div(uWaveSpatialScale);
+  const pz = positionWorld.z.div(uWaveSpatialScale);
 
   const wAmp = (a) => a.mul(uWaveSpatialScale).mul(uWaveAmpScale);
 
-  const vY =
-    sin(px.mul(uW1Freq).add(time.mul(uW1Speed))).mul(wAmp(uW1Amp))
-    .add(sin(pz.mul(uW2Freq).add(time.mul(uW2Speed))).mul(wAmp(uW2Amp)))
-    .add(sin(px.add(pz).mul(uW3Freq).add(time.mul(uW3Speed))).mul(wAmp(uW3Amp)))
-    .add(sin(px.mul(uW4Freq).add(pz.mul(0.8)).add(time.mul(uW4Speed))).mul(wAmp(uW4Amp)));
+  const gAdd = (dirX, dirZ, k, speed, amp, steep) => {
+    const dirLen = dirX.mul(dirX).add(dirZ.mul(dirZ)).sqrt().max(0.00001);
+    const dx = dirX.div(dirLen);
+    const dz = dirZ.div(dirLen);
+    const A = wAmp(amp);
+    const Q = steep.clamp(0.0, 0.98);
+    const theta = k.mul(dx.mul(px).add(dz.mul(pz))).add(time.mul(speed));
+    const c = cos(theta);
+    const s = sin(theta);
+    return vec3(
+      Q.mul(A).mul(dx).mul(c),
+      A.mul(s),
+      Q.mul(A).mul(dz).mul(c),
+    );
+  };
 
-  const displacedPosition = positionLocal.add(vec3(0, vY.mul(uWaveVisualScale), 0));
+  const gDisp =
+    gAdd(uG1DirX, uG1DirZ, uG1K, uG1Speed, uG1Amp, uG1Steep)
+      .add(gAdd(uG2DirX, uG2DirZ, uG2K, uG2Speed, uG2Amp, uG2Steep))
+      .add(gAdd(uG3DirX, uG3DirZ, uG3K, uG3Speed, uG3Amp, uG3Steep))
+      .add(gAdd(uG4DirX, uG4DirZ, uG4K, uG4Speed, uG4Amp, uG4Steep));
+
+  // Note: waveVisualScale scales the full displacement (including choppiness) so
+  // setting it to 0 fully flattens the water surface.
+  const displacedPosition = positionLocal.add(gDisp.mul(uWaveVisualScale));
 
   // Worley noise for surface color + refraction (samples world position after displacement)
   const t = time.mul(uNoiseSpeed);
@@ -228,6 +342,16 @@ async function init() {
   boat.position.set(0, 0.5, 0);
   scene.add(boat);
 
+  const enemyObj = createEnemyShip();
+  const enemyShip = enemyObj.group;
+  enemyShip.position.set(32, 0.5, 28);
+  scene.add(enemyShip);
+
+  const enemyHealthBar = createEnemyHealthBar();
+  scene.add(enemyHealthBar.sprite);
+  let enemyHealth = 1;
+  enemyHealthBar.setHealth(enemyHealth);
+
   // ——— Input ———
   const keys = { w: false, a: false, s: false, d: false };
   window.addEventListener('keydown', (e) => {
@@ -241,10 +365,6 @@ async function init() {
 
   // ——— Boat physics state ———
   let speed = 0;
-  const maxSpeed = 14;
-  const accel = 10;
-  const drag = 2.2;
-  const turnSpeed = 2.4;
 
   // ——— Camera orbit state ———
   const oc = config.camera;
@@ -464,6 +584,10 @@ async function init() {
   const camDesired  = new THREE.Vector3();
   const worldUp     = new THREE.Vector3(0, 1, 0);
   const rightVec    = new THREE.Vector3();
+  const enemyForward = new THREE.Vector3();
+  const enemyRight   = new THREE.Vector3();
+  const enemyHealthBarLocal = new THREE.Vector3(0, 6.35, 0);
+  const enemyHealthBarWorld = new THREE.Vector3();
 
   function spawnCannonProjectile(muzzleIndex, powerScale, side) {
     if (!prepareCannonMuzzle(muzzleIndex, side)) return;
@@ -671,10 +795,22 @@ async function init() {
     // Sync TSL uniforms from config (live dev-panel + exported defaults)
     const w = config.waves;
     const water = config.water;
-    uW1Freq.value  = w.wave1.freq;  uW1Speed.value = w.wave1.speed; uW1Amp.value = w.wave1.amp;
-    uW2Freq.value  = w.wave2.freq;  uW2Speed.value = w.wave2.speed; uW2Amp.value = w.wave2.amp;
-    uW3Freq.value  = w.wave3.freq;  uW3Speed.value = w.wave3.speed; uW3Amp.value = w.wave3.amp;
-    uW4Freq.value  = w.wave4.freq;  uW4Speed.value = w.wave4.speed; uW4Amp.value = w.wave4.amp;
+    uG1DirX.value = w.wave1.dirX; uG1DirZ.value = w.wave1.dirZ;
+    uG1K.value = (Math.PI * 2) / Math.max(0.001, w.wave1.wavelength);
+    uG1Speed.value = w.wave1.speed; uG1Amp.value = w.wave1.amp; uG1Steep.value = w.wave1.steepness;
+
+    uG2DirX.value = w.wave2.dirX; uG2DirZ.value = w.wave2.dirZ;
+    uG2K.value = (Math.PI * 2) / Math.max(0.001, w.wave2.wavelength);
+    uG2Speed.value = w.wave2.speed; uG2Amp.value = w.wave2.amp; uG2Steep.value = w.wave2.steepness;
+
+    uG3DirX.value = w.wave3.dirX; uG3DirZ.value = w.wave3.dirZ;
+    uG3K.value = (Math.PI * 2) / Math.max(0.001, w.wave3.wavelength);
+    uG3Speed.value = w.wave3.speed; uG3Amp.value = w.wave3.amp; uG3Steep.value = w.wave3.steepness;
+
+    uG4DirX.value = w.wave4.dirX; uG4DirZ.value = w.wave4.dirZ;
+    uG4K.value = (Math.PI * 2) / Math.max(0.001, w.wave4.wavelength);
+    uG4Speed.value = w.wave4.speed; uG4Amp.value = w.wave4.amp; uG4Steep.value = w.wave4.steepness;
+
     uWaveSpatialScale.value = Math.max(0.01, w.spatialScale);
     uWaveAmpScale.value = Math.max(0, w.ampScale);
     uWaveVisualScale.value = water.waveVisualScale;
@@ -724,13 +860,14 @@ async function init() {
     boatObj.flagMain.position.z = boatObj.mainSailBaseZ + Math.abs(flagFlap) * 0.15;
 
     // Boat movement
-    if (keys.w) speed += accel * dt;
-    if (keys.s) speed -= accel * dt * 0.7;
-    speed *= Math.exp(-drag * dt);
-    speed = THREE.MathUtils.clamp(speed, -maxSpeed * 0.35, maxSpeed);
+    const bm = config.boat;
+    if (keys.w) speed += bm.accel * dt;
+    if (keys.s) speed -= bm.accel * dt * 0.7;
+    speed *= Math.exp(-bm.drag * dt);
+    speed = THREE.MathUtils.clamp(speed, -bm.maxSpeed * 0.35, bm.maxSpeed);
 
-    if (keys.a) boat.rotation.y += turnSpeed * dt * (speed >= 0 ? 1 : -1);
-    if (keys.d) boat.rotation.y -= turnSpeed * dt * (speed >= 0 ? 1 : -1);
+    if (keys.a) boat.rotation.y += bm.turnSpeed * dt * (speed >= 0 ? 1 : -1);
+    if (keys.d) boat.rotation.y -= bm.turnSpeed * dt * (speed >= 0 ? 1 : -1);
 
     boatForward.set(Math.sin(boat.rotation.y), 0, Math.cos(boat.rotation.y));
     boat.position.x += boatForward.x * speed * dt;
@@ -746,6 +883,21 @@ async function init() {
     const boatRoll  = Math.asin(THREE.MathUtils.clamp(n.dot(rightVec), -0.4, 0.4));
     boat.rotation.x = THREE.MathUtils.lerp(boat.rotation.x, boatPitch, 0.12);
     boat.rotation.z = THREE.MathUtils.lerp(boat.rotation.z, boatRoll, 0.12);
+
+    const ex = enemyShip.position.x;
+    const ez = enemyShip.position.z;
+    enemyShip.position.y = waveHeight(ex, ez, t) + 0.32;
+    const nEnemy = waveNormal(ex, ez, t);
+    enemyForward.set(Math.sin(enemyShip.rotation.y), 0, Math.cos(enemyShip.rotation.y));
+    enemyRight.crossVectors(enemyForward, worldUp).normalize();
+    const enemyPitch = Math.asin(THREE.MathUtils.clamp(-nEnemy.dot(enemyForward), -0.35, 0.35));
+    const enemyRoll = Math.asin(THREE.MathUtils.clamp(nEnemy.dot(enemyRight), -0.4, 0.4));
+    enemyShip.rotation.x = THREE.MathUtils.lerp(enemyShip.rotation.x, enemyPitch, 0.12);
+    enemyShip.rotation.z = THREE.MathUtils.lerp(enemyShip.rotation.z, enemyRoll, 0.12);
+
+    enemyShip.updateMatrixWorld(true);
+    enemyHealthBarWorld.copy(enemyHealthBarLocal).applyMatrix4(enemyShip.matrixWorld);
+    enemyHealthBar.sprite.position.copy(enemyHealthBarWorld);
 
     for (let i = cannonShotQueue.length - 1; i >= 0; i--) {
       const q = cannonShotQueue[i];
