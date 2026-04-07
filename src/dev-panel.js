@@ -77,6 +77,7 @@ const config = {
     rangeAtMinPower: ${n(cbt.rangeAtMinPower, 1)},
     rangeAtMaxPower: ${n(cbt.rangeAtMaxPower, 1)},
     trajectoryPreviewMuzzleIndex: ${Math.round(cbt.trajectoryPreviewMuzzleIndex)},
+    trajectoryPreviewStarboardMuzzleIndex: ${Math.round(cbt.trajectoryPreviewStarboardMuzzleIndex ?? cbt.trajectoryPreviewMuzzleIndex)},
     trajectorySampleDt: ${n(cbt.trajectorySampleDt, 5)},
     trajectoryMaxSteps: ${Math.round(cbt.trajectoryMaxSteps)},
   },
