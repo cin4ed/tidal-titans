@@ -6,10 +6,16 @@ const config = {
   waves: {
     spatialScale: 7.85,
     ampScale: 0.4,
-    wave1: { freq: 0.5, speed: 1.2, amp: 0.2 },
-    wave2: { freq: 0.7, speed: 0.8, amp: 0.4 },
-    wave3: { freq: 0.3, speed: 1.5, amp: 0.3 },
-    wave4: { freq: 1.5, speed: 2, amp: 0.15 },
+    // Gerstner components (4-wave sum).
+    // - dirX/dirZ: travel direction (normalized at runtime)
+    // - wavelength: in scaled-space units (x/spatialScale, z/spatialScale)
+    // - speed: angular phase speed (radians/sec)
+    // - amp: base amplitude (scaled by spatialScale * ampScale in main.js)
+    // - steepness: choppiness (0–~1), clamped for stability
+    wave1: { dirX:  1.0, dirZ:  0.2, wavelength: 3.2, speed: 1.25, amp: 0.22, steepness: 0.35 },
+    wave2: { dirX: -0.4, dirZ:  1.0, wavelength: 2.1, speed: 0.90, amp: 0.42, steepness: 0.28 },
+    wave3: { dirX:  0.9, dirZ:  0.9, wavelength: 4.4, speed: 1.55, amp: 0.30, steepness: 0.22 },
+    wave4: { dirX:  1.0, dirZ: -0.6, wavelength: 1.5, speed: 2.05, amp: 0.16, steepness: 0.18 },
   },
 
   water: {

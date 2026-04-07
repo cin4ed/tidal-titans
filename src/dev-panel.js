@@ -18,10 +18,10 @@ const config = {
   waves: {
     spatialScale: ${n(w.spatialScale)},
     ampScale: ${n(w.ampScale)},
-    wave1: { freq: ${n(w.wave1.freq)}, speed: ${n(w.wave1.speed)}, amp: ${n(w.wave1.amp)} },
-    wave2: { freq: ${n(w.wave2.freq)}, speed: ${n(w.wave2.speed)}, amp: ${n(w.wave2.amp)} },
-    wave3: { freq: ${n(w.wave3.freq)}, speed: ${n(w.wave3.speed)}, amp: ${n(w.wave3.amp)} },
-    wave4: { freq: ${n(w.wave4.freq)}, speed: ${n(w.wave4.speed)}, amp: ${n(w.wave4.amp)} },
+    wave1: { dirX: ${n(w.wave1.dirX)}, dirZ: ${n(w.wave1.dirZ)}, wavelength: ${n(w.wave1.wavelength)}, speed: ${n(w.wave1.speed)}, amp: ${n(w.wave1.amp)}, steepness: ${n(w.wave1.steepness)} },
+    wave2: { dirX: ${n(w.wave2.dirX)}, dirZ: ${n(w.wave2.dirZ)}, wavelength: ${n(w.wave2.wavelength)}, speed: ${n(w.wave2.speed)}, amp: ${n(w.wave2.amp)}, steepness: ${n(w.wave2.steepness)} },
+    wave3: { dirX: ${n(w.wave3.dirX)}, dirZ: ${n(w.wave3.dirZ)}, wavelength: ${n(w.wave3.wavelength)}, speed: ${n(w.wave3.speed)}, amp: ${n(w.wave3.amp)}, steepness: ${n(w.wave3.steepness)} },
+    wave4: { dirX: ${n(w.wave4.dirX)}, dirZ: ${n(w.wave4.dirZ)}, wavelength: ${n(w.wave4.wavelength)}, speed: ${n(w.wave4.speed)}, amp: ${n(w.wave4.amp)}, steepness: ${n(w.wave4.steepness)} },
   },
 
   water: {
@@ -96,7 +96,7 @@ export function mountDevPanel(config, options = {}) {
   wavesFolder.addBinding(config.waves, 'spatialScale', {
     label: 'Spatial scale',
     min: 0.25,
-    max: 8,
+    max: 80,
     step: 0.05,
   });
   wavesFolder.addBinding(config.waves, 'ampScale', {
@@ -108,9 +108,12 @@ export function mountDevPanel(config, options = {}) {
   [1, 2, 3, 4].forEach((i) => {
     const key = `wave${i}`;
     const wf = wavesFolder.addFolder({ title: `Layer ${i}`, expanded: false });
-    wf.addBinding(config.waves[key], 'freq',  { label: 'freq',  min: 0.0, max: 3.0, step: 0.01 });
+    wf.addBinding(config.waves[key], 'dirX', { label: 'dirX', min: -1.0, max: 1.0, step: 0.01 });
+    wf.addBinding(config.waves[key], 'dirZ', { label: 'dirZ', min: -1.0, max: 1.0, step: 0.01 });
+    wf.addBinding(config.waves[key], 'wavelength', { label: 'λ', min: 0.25, max: 12.0, step: 0.05 });
     wf.addBinding(config.waves[key], 'speed', { label: 'speed', min: 0.0, max: 5.0, step: 0.01 });
-    wf.addBinding(config.waves[key], 'amp',   { label: 'amp',   min: 0.0, max: 2.0, step: 0.01 });
+    wf.addBinding(config.waves[key], 'amp', { label: 'amp', min: 0.0, max: 2.0, step: 0.01 });
+    wf.addBinding(config.waves[key], 'steepness', { label: 'steep', min: 0.0, max: 0.98, step: 0.01 });
   });
 
   // ——— Water appearance ———
