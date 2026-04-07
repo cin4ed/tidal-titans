@@ -253,10 +253,6 @@ async function init() {
 
   // ——— Boat physics state ———
   let speed = 0;
-  const maxSpeed = 14;
-  const accel = 10;
-  const drag = 2.2;
-  const turnSpeed = 2.4;
 
   // ——— Camera orbit state ———
   const oc = config.camera;
@@ -740,13 +736,14 @@ async function init() {
     boatObj.flagMain.position.z = boatObj.mainSailBaseZ + Math.abs(flagFlap) * 0.15;
 
     // Boat movement
-    if (keys.w) speed += accel * dt;
-    if (keys.s) speed -= accel * dt * 0.7;
-    speed *= Math.exp(-drag * dt);
-    speed = THREE.MathUtils.clamp(speed, -maxSpeed * 0.35, maxSpeed);
+    const bm = config.boat;
+    if (keys.w) speed += bm.accel * dt;
+    if (keys.s) speed -= bm.accel * dt * 0.7;
+    speed *= Math.exp(-bm.drag * dt);
+    speed = THREE.MathUtils.clamp(speed, -bm.maxSpeed * 0.35, bm.maxSpeed);
 
-    if (keys.a) boat.rotation.y += turnSpeed * dt * (speed >= 0 ? 1 : -1);
-    if (keys.d) boat.rotation.y -= turnSpeed * dt * (speed >= 0 ? 1 : -1);
+    if (keys.a) boat.rotation.y += bm.turnSpeed * dt * (speed >= 0 ? 1 : -1);
+    if (keys.d) boat.rotation.y -= bm.turnSpeed * dt * (speed >= 0 ? 1 : -1);
 
     boatForward.set(Math.sin(boat.rotation.y), 0, Math.cos(boat.rotation.y));
     boat.position.x += boatForward.x * speed * dt;

@@ -8,6 +8,7 @@ function serializeConfig(config) {
   const fog = config.fog;
   const sky = config.sky;
   const cam = config.camera;
+  const boat = config.boat;
   const cbt = config.combat;
   return `// Scene / render tuning — single source of truth.
 // Tweak values in the dev panel (npm run dev), then click "Export Config"
@@ -54,6 +55,13 @@ const config = {
     distanceMin:  ${n(cam.distanceMin, 1)},
     distanceMax:  ${n(cam.distanceMax, 1)},
     distanceStep: ${n(cam.distanceStep, 2)},
+  },
+
+  boat: {
+    maxSpeed: ${n(boat.maxSpeed, 2)},
+    accel: ${n(boat.accel, 2)},
+    drag: ${n(boat.drag, 2)},
+    turnSpeed: ${n(boat.turnSpeed, 2)},
   },
 
   combat: {
@@ -252,6 +260,34 @@ export function mountDevPanel(config, options = {}) {
     bindRowHoverHint(api.element, hint);
     return api;
   }
+
+  // ——— Boat movement (WASD) ———
+  const boatFolder = pane.addFolder({ title: 'Boat Movement', expanded: false });
+  const bm = config.boat;
+  bindWithHint(boatFolder, bm, 'maxSpeed', {
+    label: 'Max speed',
+    min: 2,
+    max: 40,
+    step: 0.5,
+  }, 'Forward speed cap (W). Reverse is 35% of this (S).');
+  bindWithHint(boatFolder, bm, 'accel', {
+    label: 'Acceleration',
+    min: 1,
+    max: 40,
+    step: 0.5,
+  }, 'How quickly W/S change forward speed each second.');
+  bindWithHint(boatFolder, bm, 'drag', {
+    label: 'Drag',
+    min: 0.1,
+    max: 10,
+    step: 0.1,
+  }, 'Exponential slowdown when not accelerating (higher = ship stops faster).');
+  bindWithHint(boatFolder, bm, 'turnSpeed', {
+    label: 'Turn speed',
+    min: 0.5,
+    max: 8,
+    step: 0.05,
+  }, 'Yaw rate in rad/s for A/D; sign flips when moving astern.');
 
   // ——— Combat / cannons ———
   const combatFolder = pane.addFolder({ title: 'Combat / Cannons', expanded: false });

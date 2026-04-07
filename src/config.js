@@ -45,6 +45,13 @@ const config = {
     distanceStep: 1,
   },
 
+  boat: {
+    maxSpeed: 14,
+    accel: 10,
+    drag: 2.2,
+    turnSpeed: 2.4,
+  },
+
   combat: {
     muzzleSpeed: 45,
     launchAngleDeg: 18,
