@@ -261,7 +261,7 @@ export function mountDevPanel(config, options = {}) {
     min: 5,
     max: 120,
     step: 1,
-  }, 'Base speed along the port broadside (horizontal). Multiplied by charge power; boat forward speed is added to the shot.');
+  }, 'Base speed along the active broadside (horizontal). Multiplied by charge power; boat forward speed is added to the shot.');
   bindWithHint(combatFolder, cb, 'launchAngleDeg', {
     label: 'Launch angle (°)',
     min: -5,
@@ -285,13 +285,13 @@ export function mountDevPanel(config, options = {}) {
     min: 0,
     max: 0.35,
     step: 0.01,
-  }, 'Delay between each of the three port shots after you release the mouse (seconds).');
+  }, 'Delay between each of the three shots on that side after you release Q or E (seconds).');
   bindWithHint(combatFolder, cb, 'cooldown', {
     label: 'Cooldown (s)',
     min: 0.1,
     max: 3,
     step: 0.05,
-  }, 'Seconds after firing a volley before you can start charging again (game time).');
+  }, 'Seconds after firing a volley on one side before you can charge that side again; the other broadside has its own cooldown.');
   bindWithHint(combatFolder, cb, 'powerMin', {
     label: 'Power min (tap)',
     min: 0.1,
@@ -327,7 +327,13 @@ export function mountDevPanel(config, options = {}) {
     min: 0,
     max: 2,
     step: 1,
-  }, 'Which port muzzle (0–2) the yellow arc is drawn from while you charge.');
+  }, 'Which port muzzle (0–2) the yellow arc uses while you hold Q.');
+  bindWithHint(combatFolder, cb, 'trajectoryPreviewStarboardMuzzleIndex', {
+    label: 'Preview muzzle (stbd)',
+    min: 0,
+    max: 2,
+    step: 1,
+  }, 'Which starboard muzzle (0–2) the yellow arc uses while you hold E.');
   bindWithHint(combatFolder, cb, 'trajectorySampleDt', {
     label: 'Preview Δt',
     min: 0.004,

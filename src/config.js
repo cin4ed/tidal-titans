@@ -58,6 +58,7 @@ const config = {
     rangeAtMinPower: 70,
     rangeAtMaxPower: 220,
     trajectoryPreviewMuzzleIndex: 1,
+    trajectoryPreviewStarboardMuzzleIndex: 1,
     trajectorySampleDt: 0.01667,
     trajectoryMaxSteps: 420,
   },

@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 
-/** Procedural pirate ship; returns { group, sails, flag, portCannonMuzzleLocal, ...baseZ } for the animation loop. */
+/** Procedural pirate ship; returns { group, sails, flag, port/starboard cannon muzzles, ...baseZ } for the animation loop. */
 export function createPirateShip() {
   const boat = new THREE.Group();
 
@@ -149,23 +149,39 @@ export function createPirateShip() {
   addRope(0, 6.35, 2.35, 0, 1.22, 4.05);
   addRope(0, 3.9, 0.3, 0, 3.9, 2.35);
 
-  // ——— Cannons ———
+  // ——— Cannons (port = −X, starboard = +X in local space before boat.rotation.y) ———
   const cannonPositions = [-1.2, 0.1, 1.6];
   const barrelHalfLen = 0.75 * 0.5;
   const portMuzzleX = -1.35 - barrelHalfLen;
+  const starboardMuzzleX = 1.35 + barrelHalfLen;
   const portCannonMuzzleLocal = cannonPositions.map(
     (cz) => new THREE.Vector3(portMuzzleX, 0.78, cz)
   );
+  const starboardCannonMuzzleLocal = cannonPositions.map(
+    (cz) => new THREE.Vector3(starboardMuzzleX, 0.78, cz)
+  );
+
+  const portCannons = new THREE.Group();
+  portCannons.name = 'PortCannons';
+  const starboardCannons = new THREE.Group();
+  starboardCannons.name = 'StarboardCannons';
+  boat.add(portCannons);
+  boat.add(starboardCannons);
+
   for (const cz of cannonPositions) {
     for (const sx of [-1, 1]) {
+      const broadside = sx < 0 ? 'port' : 'starboard';
+      const parent = sx < 0 ? portCannons : starboardCannons;
       const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.095, 0.115, 0.75, 8), metalMat);
       barrel.rotation.z = Math.PI / 2;
       barrel.position.set(sx * 1.35, 0.78, cz);
-      boat.add(barrel);
+      barrel.userData.broadside = broadside;
+      parent.add(barrel);
       const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.08, 8), woodDark);
       wheel.rotation.z = Math.PI / 2;
       wheel.position.set(sx * 1.2, 0.65, cz);
-      boat.add(wheel);
+      wheel.userData.broadside = broadside;
+      parent.add(wheel);
     }
   }
 
@@ -232,6 +248,7 @@ export function createPirateShip() {
     foreSail,
     flagMain,
     portCannonMuzzleLocal,
+    starboardCannonMuzzleLocal,
     mainSailBaseZ: 0.3,
     topSailBaseZ: 0.3,
     foreSailBaseZ: 2.35,

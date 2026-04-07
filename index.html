@@ -60,6 +60,14 @@
       opacity: 0.88;
       font-weight: 400;
     }
+    .hint-label kbd {
+      font-family: inherit;
+      font-size: 10px;
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: rgba(0,0,0,0.25);
+      border: 1px solid rgba(255,255,255,0.25);
+    }
     /* Stack alternate primary rows in one grid cell so row height = max(both); use visibility not display */
     .hint-swap-slot {
       display: grid;
@@ -111,13 +119,14 @@
     <div class="hint-row">
       <div class="hint-icon" aria-hidden="true">
         <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="16" cy="16" r="6" fill="currentColor" fill-opacity="0.2"/>
-          <path d="M16 10v12M10 16h12" opacity="0.85"/>
+          <rect x="5" y="10" width="8" height="10" rx="1.5" fill="currentColor" fill-opacity="0.2"/>
+          <rect x="19" y="10" width="8" height="10" rx="1.5" fill="currentColor" fill-opacity="0.2"/>
+          <path d="M9 14v2M23 14v2"/>
         </svg>
       </div>
       <div class="hint-label">
-        <strong>Left click</strong>
-        <small>When the pointer is locked: hold to charge, release to fire a port broadside; arc shows the path. Cooldown after each volley.</small>
+        <strong>Q / E</strong>
+        <small>When the pointer is locked: hold <kbd>Q</kbd> to charge the port (left) broadside, <kbd>E</kbd> for starboard (right); release to fire. Arc shows the path. Each side has its own cooldown.</small>
       </div>
     </div>
     <div class="hint-row">

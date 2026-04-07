@@ -259,7 +259,8 @@ async function init() {
 
   // ——— Pointer Lock ———
   let pointerLocked = false;
-  let cannonCharging = false;
+  /** @type {null | 'port' | 'starboard'} */
+  let cannonChargingSide = null;
 
   renderer.domElement.addEventListener('click', () => {
     if (!pointerLocked) renderer.domElement.requestPointerLock();
@@ -267,7 +268,7 @@ async function init() {
 
   document.addEventListener('pointerlockchange', () => {
     pointerLocked = document.pointerLockElement === renderer.domElement;
-    if (!pointerLocked) cannonCharging = false;
+    if (!pointerLocked) cannonChargingSide = null;
     const hint = document.getElementById('hint');
     if (hint) hint.classList.toggle('is-locked', pointerLocked);
   });
@@ -281,7 +282,7 @@ async function init() {
 
   const timer = new THREE.Timer();
 
-  // ——— Port broadside (pointer locked: hold LMB to charge, release to fire) ———
+  // ——— Broadsides (pointer locked: hold Q = port / E = starboard, release to fire) ———
   // Tuning: config.combat (dev panel + Export Config).
   const CANNON_TRAJ_BUFFER_STEPS = 800;
 
@@ -295,13 +296,14 @@ async function init() {
 
   /** @type {{ mesh: THREE.Mesh, velocity: THREE.Vector3, age: number, spawnX: number, spawnZ: number, maxRangeSq: number, maxLife: number }[]} */
   const cannonProjectiles = [];
-  /** @type {{ fireAt: number, muzzleIndex: number, powerScale: number }[]} */
+  /** @type {{ fireAt: number, muzzleIndex: number, powerScale: number, side: 'port' | 'starboard' }[]} */
   const cannonShotQueue = [];
-  let cannonCooldownUntil = 0;
+  let cannonCooldownUntilPort = 0;
+  let cannonCooldownUntilStarboard = 0;
   let cannonChargeStartWall = 0;
 
   const muzzleWorld = new THREE.Vector3();
-  const portBroadsideDir = new THREE.Vector3();
+  const broadsideDir = new THREE.Vector3();
   const boatVelAtFire = new THREE.Vector3();
   const cannonSpawnVel = new THREE.Vector3();
   const cannonHorizVel = new THREE.Vector3();
@@ -388,42 +390,56 @@ async function init() {
     return THREE.MathUtils.lerp(4.5, 8.5, u);
   }
 
-  function prepareCannonMuzzle(muzzleIndex) {
-    const locals = boatObj.portCannonMuzzleLocal;
+  function prepareCannonMuzzle(muzzleIndex, side) {
+    const locals =
+      side === 'port' ? boatObj.portCannonMuzzleLocal : boatObj.starboardCannonMuzzleLocal;
     if (!locals || muzzleIndex < 0 || muzzleIndex >= locals.length) return false;
     boat.updateMatrixWorld(true);
     muzzleWorld.copy(locals[muzzleIndex]).applyMatrix4(boat.matrixWorld);
-    portBroadsideDir.set(-rightVec.x, 0, -rightVec.z);
-    if (portBroadsideDir.lengthSq() < 1e-8) portBroadsideDir.set(-1, 0, 0);
-    portBroadsideDir.normalize();
-    muzzleWorld.addScaledVector(portBroadsideDir, 3);
+    if (side === 'port') {
+      broadsideDir.set(-rightVec.x, 0, -rightVec.z);
+      if (broadsideDir.lengthSq() < 1e-8) broadsideDir.set(-1, 0, 0);
+    } else {
+      broadsideDir.set(rightVec.x, 0, rightVec.z);
+      if (broadsideDir.lengthSq() < 1e-8) broadsideDir.set(1, 0, 0);
+    }
+    broadsideDir.normalize();
+    muzzleWorld.addScaledVector(broadsideDir, 3);
     boatVelAtFire.copy(boatForward).multiplyScalar(speed);
     return true;
   }
 
-  renderer.domElement.addEventListener('mousedown', (e) => {
-    if (e.button !== 0) return;
+  window.addEventListener('keydown', (e) => {
+    if (e.repeat) return;
     if (document.pointerLockElement !== renderer.domElement) return;
+    const k = e.key.toLowerCase();
+    if (k !== 'q' && k !== 'e') return;
+    const side = k === 'q' ? 'port' : 'starboard';
     const tNow = timer.getElapsed();
-    if (tNow < cannonCooldownUntil || cannonCharging) return;
-    e.preventDefault();
-    cannonCharging = true;
+    const cdUntil = side === 'port' ? cannonCooldownUntilPort : cannonCooldownUntilStarboard;
+    if (tNow < cdUntil || cannonChargingSide !== null) return;
+    cannonChargingSide = side;
     cannonChargeStartWall = performance.now();
   });
 
-  document.addEventListener('mouseup', (e) => {
-    if (e.button !== 0) return;
-    if (!cannonCharging) return;
-    cannonCharging = false;
+  window.addEventListener('keyup', (e) => {
+    const k = e.key.toLowerCase();
+    if (k !== 'q' && k !== 'e') return;
+    const side = k === 'q' ? 'port' : 'starboard';
+    if (cannonChargingSide !== side) return;
+    cannonChargingSide = null;
     if (document.pointerLockElement !== renderer.domElement) return;
     const tNow = timer.getElapsed();
     const holdSec = (performance.now() - cannonChargeStartWall) / 1000;
     const powerScale = cannonPowerFromHoldSeconds(holdSec);
     const cbt = config.combat;
-    cannonCooldownUntil = tNow + cbt.cooldown;
-    const locals = boatObj.portCannonMuzzleLocal;
+    if (side === 'port') cannonCooldownUntilPort = tNow + cbt.cooldown;
+    else cannonCooldownUntilStarboard = tNow + cbt.cooldown;
+    const locals =
+      side === 'port' ? boatObj.portCannonMuzzleLocal : boatObj.starboardCannonMuzzleLocal;
+    if (!locals) return;
     for (let i = 0; i < locals.length; i++) {
-      cannonShotQueue.push({ fireAt: tNow + i * cbt.volleyStagger, muzzleIndex: i, powerScale });
+      cannonShotQueue.push({ fireAt: tNow + i * cbt.volleyStagger, muzzleIndex: i, powerScale, side });
     }
   });
 
@@ -449,14 +465,14 @@ async function init() {
   const worldUp     = new THREE.Vector3(0, 1, 0);
   const rightVec    = new THREE.Vector3();
 
-  function spawnCannonProjectile(muzzleIndex, powerScale) {
-    if (!prepareCannonMuzzle(muzzleIndex)) return;
+  function spawnCannonProjectile(muzzleIndex, powerScale, side) {
+    if (!prepareCannonMuzzle(muzzleIndex, side)) return;
 
     const launchAngleRad = THREE.MathUtils.degToRad(config.combat.launchAngleDeg ?? 0);
     const muzzleV = config.combat.muzzleSpeed * powerScale;
     const cosA = Math.cos(launchAngleRad);
     const sinA = Math.sin(launchAngleRad);
-    cannonHorizVel.copy(portBroadsideDir).multiplyScalar(muzzleV * cosA);
+    cannonHorizVel.copy(broadsideDir).multiplyScalar(muzzleV * cosA);
     cannonSpawnVel.copy(cannonHorizVel).addScaledVector(worldUp, muzzleV * sinA).add(boatVelAtFire);
 
     const mesh = new THREE.Mesh(cannonBallGeo, cannonBallMat);
@@ -476,10 +492,17 @@ async function init() {
   }
 
   function updateCannonTrajectoryPreview(t) {
+    const side = cannonChargingSide;
+    const cdOk =
+      side === 'port'
+        ? t >= cannonCooldownUntilPort
+        : side === 'starboard'
+          ? t >= cannonCooldownUntilStarboard
+          : false;
     const show =
-      cannonCharging &&
+      side !== null &&
       pointerLocked &&
-      t >= cannonCooldownUntil &&
+      cdOk &&
       document.pointerLockElement === renderer.domElement;
     if (!show) {
       cannonTrajectoryRibbon.visible = false;
@@ -489,15 +512,17 @@ async function init() {
     const holdSec = (performance.now() - cannonChargeStartWall) / 1000;
     const powerScale = cannonPowerFromHoldSeconds(holdSec);
 
-    const localsPreview = boatObj.portCannonMuzzleLocal;
+    const localsPreview =
+      side === 'port' ? boatObj.portCannonMuzzleLocal : boatObj.starboardCannonMuzzleLocal;
+    const idxSrc =
+      side === 'port'
+        ? config.combat.trajectoryPreviewMuzzleIndex
+        : (config.combat.trajectoryPreviewStarboardMuzzleIndex ??
+          config.combat.trajectoryPreviewMuzzleIndex);
     const previewMuzzle = localsPreview
-      ? THREE.MathUtils.clamp(
-        Math.round(config.combat.trajectoryPreviewMuzzleIndex),
-        0,
-        localsPreview.length - 1,
-      )
+      ? THREE.MathUtils.clamp(Math.round(idxSrc), 0, localsPreview.length - 1)
       : 1;
-    if (!prepareCannonMuzzle(previewMuzzle)) {
+    if (!prepareCannonMuzzle(previewMuzzle, side)) {
       cannonTrajectoryRibbon.visible = false;
       return;
     }
@@ -508,7 +533,7 @@ async function init() {
     const muzzleV = config.combat.muzzleSpeed * powerScale;
     const cosA = Math.cos(launchAngleRad);
     const sinA = Math.sin(launchAngleRad);
-    trajV.copy(portBroadsideDir).multiplyScalar(muzzleV * cosA).addScaledVector(worldUp, muzzleV * sinA).add(boatVelAtFire);
+    trajV.copy(broadsideDir).multiplyScalar(muzzleV * cosA).addScaledVector(worldUp, muzzleV * sinA).add(boatVelAtFire);
     trajP.copy(muzzleWorld);
 
     let w = 0;
@@ -725,7 +750,7 @@ async function init() {
     for (let i = cannonShotQueue.length - 1; i >= 0; i--) {
       const q = cannonShotQueue[i];
       if (t >= q.fireAt) {
-        spawnCannonProjectile(q.muzzleIndex, q.powerScale);
+        spawnCannonProjectile(q.muzzleIndex, q.powerScale, q.side);
         cannonShotQueue.splice(i, 1);
       }
     }
