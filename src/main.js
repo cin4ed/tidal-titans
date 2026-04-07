@@ -23,6 +23,7 @@ import { inject } from '@vercel/analytics';
 
 import config from './config.js';
 import { createPirateShip } from './models/pirateShip.js';
+import { createEnemyShip } from './models/enemyShip.js';
 
 // Initialize Vercel Web Analytics
 inject();
@@ -227,6 +228,11 @@ async function init() {
   const boat    = boatObj.group;
   boat.position.set(0, 0.5, 0);
   scene.add(boat);
+
+  const enemyObj = createEnemyShip();
+  const enemyShip = enemyObj.group;
+  enemyShip.position.set(32, 0.5, 28);
+  scene.add(enemyShip);
 
   // ——— Input ———
   const keys = { w: false, a: false, s: false, d: false };
@@ -464,6 +470,8 @@ async function init() {
   const camDesired  = new THREE.Vector3();
   const worldUp     = new THREE.Vector3(0, 1, 0);
   const rightVec    = new THREE.Vector3();
+  const enemyForward = new THREE.Vector3();
+  const enemyRight   = new THREE.Vector3();
 
   function spawnCannonProjectile(muzzleIndex, powerScale, side) {
     if (!prepareCannonMuzzle(muzzleIndex, side)) return;
@@ -746,6 +754,17 @@ async function init() {
     const boatRoll  = Math.asin(THREE.MathUtils.clamp(n.dot(rightVec), -0.4, 0.4));
     boat.rotation.x = THREE.MathUtils.lerp(boat.rotation.x, boatPitch, 0.12);
     boat.rotation.z = THREE.MathUtils.lerp(boat.rotation.z, boatRoll, 0.12);
+
+    const ex = enemyShip.position.x;
+    const ez = enemyShip.position.z;
+    enemyShip.position.y = waveHeight(ex, ez, t) + 0.32;
+    const nEnemy = waveNormal(ex, ez, t);
+    enemyForward.set(Math.sin(enemyShip.rotation.y), 0, Math.cos(enemyShip.rotation.y));
+    enemyRight.crossVectors(enemyForward, worldUp).normalize();
+    const enemyPitch = Math.asin(THREE.MathUtils.clamp(-nEnemy.dot(enemyForward), -0.35, 0.35));
+    const enemyRoll = Math.asin(THREE.MathUtils.clamp(nEnemy.dot(enemyRight), -0.4, 0.4));
+    enemyShip.rotation.x = THREE.MathUtils.lerp(enemyShip.rotation.x, enemyPitch, 0.12);
+    enemyShip.rotation.z = THREE.MathUtils.lerp(enemyShip.rotation.z, enemyRoll, 0.12);
 
     for (let i = cannonShotQueue.length - 1; i >= 0; i--) {
       const q = cannonShotQueue[i];
