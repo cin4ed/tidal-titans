@@ -24,6 +24,7 @@ import { inject } from '@vercel/analytics';
 import config from './config.js';
 import { createPirateShip } from './models/pirateShip.js';
 import { createEnemyShip } from './models/enemyShip.js';
+import { createEnemyHealthBar } from './models/enemyHealthBar.js';
 
 // Initialize Vercel Web Analytics
 inject();
@@ -233,6 +234,11 @@ async function init() {
   const enemyShip = enemyObj.group;
   enemyShip.position.set(32, 0.5, 28);
   scene.add(enemyShip);
+
+  const enemyHealthBar = createEnemyHealthBar();
+  scene.add(enemyHealthBar.sprite);
+  let enemyHealth = 1;
+  enemyHealthBar.setHealth(enemyHealth);
 
   // ——— Input ———
   const keys = { w: false, a: false, s: false, d: false };
@@ -472,6 +478,8 @@ async function init() {
   const rightVec    = new THREE.Vector3();
   const enemyForward = new THREE.Vector3();
   const enemyRight   = new THREE.Vector3();
+  const enemyHealthBarLocal = new THREE.Vector3(0, 6.35, 0);
+  const enemyHealthBarWorld = new THREE.Vector3();
 
   function spawnCannonProjectile(muzzleIndex, powerScale, side) {
     if (!prepareCannonMuzzle(muzzleIndex, side)) return;
@@ -765,6 +773,10 @@ async function init() {
     const enemyRoll = Math.asin(THREE.MathUtils.clamp(nEnemy.dot(enemyRight), -0.4, 0.4));
     enemyShip.rotation.x = THREE.MathUtils.lerp(enemyShip.rotation.x, enemyPitch, 0.12);
     enemyShip.rotation.z = THREE.MathUtils.lerp(enemyShip.rotation.z, enemyRoll, 0.12);
+
+    enemyShip.updateMatrixWorld(true);
+    enemyHealthBarWorld.copy(enemyHealthBarLocal).applyMatrix4(enemyShip.matrixWorld);
+    enemyHealthBar.sprite.position.copy(enemyHealthBarWorld);
 
     for (let i = cannonShotQueue.length - 1; i >= 0; i--) {
       const q = cannonShotQueue[i];
